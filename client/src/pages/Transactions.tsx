@@ -131,6 +131,22 @@ export default function Transactions() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
+      try {
+        const response = await fetch("/api/transactions/all", { method: "DELETE" });
+        if (!response.ok) throw new Error("Fehler beim Löschen");
+        
+        const { queryClient } = await import("@/lib/queryClient");
+        queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+        
+        toast({ title: "Gelöscht", description: "Alle Transaktionen wurden entfernt." });
+      } catch (error: any) {
+        toast({ title: "Fehler", description: error.message, variant: "destructive" });
+      }
+    }
+  };
+
   const handleCreate = async (data: any) => {
     try {
       await createTx.mutateAsync(data);
@@ -194,6 +210,14 @@ export default function Transactions() {
           >
             <Sparkles className={`w-4 h-4 ${autoCat.isPending ? 'animate-spin' : ''}`} />
             Automatisch kategorisieren
+          </Button>
+          <Button 
+            variant="outline" 
+            className="gap-2 rounded-xl text-destructive border-destructive/20 hover:bg-destructive/5"
+            onClick={handleDeleteAll}
+          >
+            <Trash className="w-4 h-4" />
+            Alle löschen
           </Button>
           <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
             <DialogTrigger asChild>

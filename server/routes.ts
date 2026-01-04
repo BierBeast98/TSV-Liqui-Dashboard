@@ -130,6 +130,11 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  app.delete("/api/transactions/all", isAuthenticated, async (req, res) => {
+    await storage.deleteAllTransactions();
+    res.status(204).send();
+  });
+
   app.post(api.transactions.upload.path, isAuthenticated, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send("No file uploaded");
     

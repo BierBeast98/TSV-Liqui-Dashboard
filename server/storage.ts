@@ -47,6 +47,7 @@ export interface IStorage extends IAuthStorage {
   getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]>;
   getTotalStats(year: number, account?: string): Promise<{ income: number, expenses: number }>;
   autoCategorize(transactionId: number): Promise<Transaction | undefined>;
+  deleteAllTransactions(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -354,6 +355,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     return tx;
+  }
+
+  async deleteAllTransactions(): Promise<void> {
+    await db.delete(transactions);
   }
 }
 
