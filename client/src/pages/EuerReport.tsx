@@ -45,6 +45,11 @@ export default function EuerReport() {
 
   const { data: report, isLoading } = useQuery<FiscalAreaReport>({
     queryKey: ['/api/report/euer', year],
+    queryFn: async () => {
+      const res = await fetch(`/api/report/euer?year=${year}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch EÜR report');
+      return res.json();
+    }
   });
 
   if (isLoading) {
