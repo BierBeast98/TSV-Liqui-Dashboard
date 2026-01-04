@@ -58,16 +58,38 @@ export async function registerRoutes(
   });
 
   app.post(api.transactions.create.path, isAuthenticated, async (req, res) => {
-    const input = api.transactions.create.input.parse(req.body);
-    const tx = await storage.createTransaction(input);
-    res.status(201).json(tx);
+    try {
+      const input = api.transactions.create.input.parse(req.body);
+      const tx = await storage.createTransaction(input);
+      res.status(201).json(tx);
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        res.status(400).json({
+          message: e.errors[0].message,
+          field: e.errors[0].path.join('.'),
+        });
+      } else {
+        throw e;
+      }
+    }
   });
 
   app.put(api.transactions.update.path, isAuthenticated, async (req, res) => {
-    const input = api.transactions.update.input.parse(req.body);
-    const tx = await storage.updateTransaction(Number(req.params.id), input);
-    if (!tx) return res.status(404).send("Not found");
-    res.json(tx);
+    try {
+      const input = api.transactions.update.input.parse(req.body);
+      const tx = await storage.updateTransaction(Number(req.params.id), input);
+      if (!tx) return res.status(404).send("Not found");
+      res.json(tx);
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        res.status(400).json({
+          message: e.errors[0].message,
+          field: e.errors[0].path.join('.'),
+        });
+      } else {
+        throw e;
+      }
+    }
   });
 
   app.delete(api.transactions.delete.path, isAuthenticated, async (req, res) => {

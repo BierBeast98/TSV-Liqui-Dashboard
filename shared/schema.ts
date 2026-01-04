@@ -29,7 +29,9 @@ export const transactions = pgTable("transactions", {
 
 // === BASE SCHEMAS ===
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
-export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
+export const insertTransactionSchema = createInsertSchema(transactions, {
+  date: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
 
 // === EXPLICIT API CONTRACT TYPES ===
 
