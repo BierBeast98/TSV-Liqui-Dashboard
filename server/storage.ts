@@ -183,9 +183,9 @@ export class DatabaseStorage implements IStorage {
         if (!stats.has(month)) continue;
         
         const type = catTypeMap.get(tx.categoryId || -1);
-        if (type === 'income') {
+        if (type === 'income' || (!type && tx.amount > 0)) {
             stats.get(month)!.income += tx.amount;
-        } else if (type === 'expense') {
+        } else if (type === 'expense' || (!type && tx.amount < 0)) {
             stats.get(month)!.expenses += Math.abs(tx.amount);
         }
     }
@@ -202,8 +202,10 @@ export class DatabaseStorage implements IStorage {
     const stats = new Map<string, number>();
 
     for (const tx of allTx) {
-        if (!tx.categoryId) continue;
-        const name = catNameMap.get(tx.categoryId) || 'Unknown';
+        let name = 'Uncategorized';
+        if (tx.categoryId) {
+            name = catNameMap.get(tx.categoryId) || 'Unknown';
+        }
         const val = Math.abs(tx.amount);
         stats.set(name, (stats.get(name) || 0) + val);
     }
