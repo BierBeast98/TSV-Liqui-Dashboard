@@ -45,11 +45,13 @@ export default function Transactions() {
   // Filters
   const [year, setYear] = useState<number>(2024);
   const [categoryId, setCategoryId] = useState<string>("all");
+  const [accountFilter, setAccountFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   
   const { data: transactions, isLoading } = useTransactions({ 
     year, 
     categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
+    account: accountFilter !== "all" ? accountFilter : undefined,
     search: search || undefined
   }) as { data: (any & { categoryName?: string, categoryType?: string })[], isLoading: boolean };
   
@@ -222,6 +224,19 @@ export default function Transactions() {
               {categories?.map((cat) => (
                 <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={accountFilter} onValueChange={setAccountFilter}>
+            <SelectTrigger className="w-[180px] rounded-lg">
+              <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Konto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Konten</SelectItem>
+              <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
+              <SelectItem value="Sparkonto">Sparkonto</SelectItem>
+              <SelectItem value="Handkasse">Handkasse</SelectItem>
             </SelectContent>
           </Select>
         </div>
