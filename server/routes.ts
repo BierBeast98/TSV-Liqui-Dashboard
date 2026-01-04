@@ -288,18 +288,32 @@ export async function registerRoutes(
   app.put("/api/euer-reports/:year", isAuthenticated, async (req, res) => {
     try {
       const year = Number(req.params.year);
+      if (isNaN(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ message: "Ungültiges Jahr" });
+      }
+      
+      // Validate numeric fields
+      const parseNum = (v: any): number => {
+        const n = parseFloat(v);
+        return isNaN(n) ? 0 : n;
+      };
+      
+      // Get uploadedBy from authenticated session
+      const user = req.user as any;
+      const uploadedBy = user?.claims?.email || user?.claims?.sub || 'unknown';
+      
       const data = {
         year,
-        sourceFileName: req.body.sourceFileName,
-        uploadedBy: req.body.uploadedBy,
-        ideellIncome: Number(req.body.ideellIncome) || 0,
-        ideellExpenses: Number(req.body.ideellExpenses) || 0,
-        vermoegenIncome: Number(req.body.vermoegenIncome) || 0,
-        vermoegenExpenses: Number(req.body.vermoegenExpenses) || 0,
-        zweckbetriebIncome: Number(req.body.zweckbetriebIncome) || 0,
-        zweckbetriebExpenses: Number(req.body.zweckbetriebExpenses) || 0,
-        wirtschaftlichIncome: Number(req.body.wirtschaftlichIncome) || 0,
-        wirtschaftlichExpenses: Number(req.body.wirtschaftlichExpenses) || 0,
+        sourceFileName: String(req.body.sourceFileName || ''),
+        uploadedBy,
+        ideellIncome: parseNum(req.body.ideellIncome),
+        ideellExpenses: parseNum(req.body.ideellExpenses),
+        vermoegenIncome: parseNum(req.body.vermoegenIncome),
+        vermoegenExpenses: parseNum(req.body.vermoegenExpenses),
+        zweckbetriebIncome: parseNum(req.body.zweckbetriebIncome),
+        zweckbetriebExpenses: parseNum(req.body.zweckbetriebExpenses),
+        wirtschaftlichIncome: parseNum(req.body.wirtschaftlichIncome),
+        wirtschaftlichExpenses: parseNum(req.body.wirtschaftlichExpenses),
       };
       const report = await storage.upsertEuerReport(data);
       res.json(report);
@@ -314,7 +328,7 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Legacy endpoint - now redirects to PDF-based data
+  // EÜR endpoint - PDF-based with transaction fallback
   app.get("/api/report/euer", isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const pdfReport = await storage.getEuerReport(year);
@@ -334,17 +348,14 @@ export async function registerRoutes(
         ],
         totalIncome: (pdfReport.ideellIncome || 0) + (pdfReport.vermoegenIncome || 0) + (pdfReport.zweckbetriebIncome || 0) + (pdfReport.wirtschaftlichIncome || 0),
         totalExpenses: (pdfReport.ideellExpenses || 0) + (pdfReport.vermoegenExpenses || 0) + (pdfReport.zweckbetriebExpenses || 0) + (pdfReport.wirtschaftlichExpenses || 0),
-        totalNet: 0, // Will be calculated on frontend
+        totalNet: 0,
       });
     } else {
-      // No PDF data - return empty structure
+      // Fallback to transaction-calculated data
+      const fiscalSummary = await storage.getFiscalAreaStats(year);
       res.json({
-        year,
-        source: 'none',
-        areas: [],
-        totalIncome: 0,
-        totalExpenses: 0,
-        totalNet: 0,
+        ...fiscalSummary,
+        source: 'transactions',
       });
     }
   });
