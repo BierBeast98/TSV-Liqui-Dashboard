@@ -133,28 +133,31 @@ export default function Transactions() {
   };
 
   const handleDeleteAll = async () => {
-    if (confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
-      try {
-        console.log("UI: Requesting deletion of all transactions");
-        const response = await fetch("/api/transactions/all", { method: "DELETE" });
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Fehler beim Löschen: ${errorText}`);
-        }
-        
-        console.log("UI: Deletion successful, force clearing all caches");
-        
-        // Hard reset of the query client state
-        queryClient.clear();
-        
-        // Use window location reload as a last resort to ensure fresh state
-        window.location.reload();
-        
-        toast({ title: "Gelöscht", description: "Alle Transaktionen wurden erfolgreich entfernt." });
-      } catch (error: any) {
-        console.error("UI: Error deleting transactions:", error);
-        toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    if (!confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
+      return;
+    }
+
+    try {
+      console.log("UI: Requesting deletion of all transactions");
+      const response = await fetch("/api/transactions/all", { method: "DELETE" });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Fehler beim Löschen: ${errorText}`);
       }
+      
+      console.log("UI: Deletion successful, force clearing all caches");
+      
+      // Hard reset of the query client state
+      queryClient.clear();
+      
+      // Use window location reload as a last resort to ensure fresh state
+      window.location.reload();
+      
+      toast({ title: "Gelöscht", description: "Alle Transaktionen wurden erfolgreich entfernt." });
+    } catch (error: any) {
+      console.error("UI: Error deleting transactions:", error);
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
     }
   };
 
