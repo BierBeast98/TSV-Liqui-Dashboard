@@ -132,7 +132,10 @@ export default function Transactions() {
     }
   };
 
-  const handleDeleteAll = async () => {
+  const handleDeleteAll = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     if (!window.confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
       return;
     }
@@ -233,9 +236,10 @@ export default function Transactions() {
             Automatisch kategorisieren
           </Button>
           <Button 
+            type="button"
             variant="outline" 
             className="gap-2 rounded-xl text-destructive border-destructive/20 hover:bg-destructive/5"
-            onClick={handleDeleteAll}
+            onClick={(e) => handleDeleteAll(e)}
           >
             <Trash className="w-4 h-4" />
             Alle löschen
