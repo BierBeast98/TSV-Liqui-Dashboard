@@ -359,7 +359,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAllTransactions(): Promise<void> {
-    await db.delete(transactions);
+    console.log("Storage: Starting deletion of all transactions");
+    const result = await db.delete(transactions).returning();
+    console.log(`Storage: Deleted ${result.length} transactions`);
   }
 }
 

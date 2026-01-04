@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
+import { queryClient } from "@/lib/queryClient";
 import { 
   Table, 
   TableBody, 
@@ -134,14 +135,22 @@ export default function Transactions() {
   const handleDeleteAll = async () => {
     if (confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
       try {
+        console.log("UI: Requesting deletion of all transactions");
         const response = await fetch("/api/transactions/all", { method: "DELETE" });
-        if (!response.ok) throw new Error("Fehler beim Löschen");
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Fehler beim Löschen: ${errorText}`);
+        }
         
-        const { queryClient } = await import("@/lib/queryClient");
-        queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+        console.log("UI: Deletion successful, invalidating queries");
+        await queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/charts"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/transactions"] });
         
-        toast({ title: "Gelöscht", description: "Alle Transaktionen wurden entfernt." });
+        toast({ title: "Gelöscht", description: "Alle Transaktionen wurden erfolgreich entfernt." });
       } catch (error: any) {
+        console.error("UI: Error deleting transactions:", error);
         toast({ title: "Fehler", description: error.message, variant: "destructive" });
       }
     }
