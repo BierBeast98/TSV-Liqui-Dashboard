@@ -389,26 +389,48 @@ export class DatabaseStorage implements IStorage {
     const desc = tx.description.toLowerCase();
 
     const mapping: Record<string, string[]> = {
-      "Mitgliedsbeiträge": ["beitrag", "mitglied", "jahresbeitrag"],
-      "Spenden": ["spende", "zuwendung", "stiftung"],
-      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier"],
-      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier", "fasching", "weihnachtsfeier"],
-      "Sponsoring": ["sponsoring", "werbung"],
-      "Trainer & Schiedsrichter": ["trainer", "lohn", "schiedsrichter", "uel-verguetung"],
-      "Platz & Gebäude": ["strom", "wasser", "gas", "wärme", "heizung", "pacht", "grundsteuer", "reinigung"],
-      "Bankgebühren": ["abschluss", "zinsen", "gebühr", "entgelt", "buchung", "karte"],
-      "Versicherungen": ["versicherung", "arag", "vdek"],
-      "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv"],
-      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug"],
+      // A. Ideeller Bereich
+      "Mitgliedsbeiträge": ["beitrag", "mitglied", "jahresbeitrag", "mitgliedschaft"],
+      "Spenden": ["spende", "zuwendung", "stiftung", "geldspende"],
+      "Zuschüsse": ["zuschuss", "förderung", "beihilfe", "kommunal"],
+      "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv", "bayerischer"],
+      "Bankgebühren": ["abschluss per", "zinsen", "gebühr", "entgelt", "kontoführung", "karte", "abschluss"],
+      "Steuern": ["finanzamt", "steuer", "ust", "kest"],
+      "Sonstige Ausgaben": ["rückweisung", "rueckweisung", "mahngebühr"],
+      
+      // B. Vermögensverwaltung
+      "Pachteinnahmen": ["pacht", "miete eingang"],
+      "Platz & Gebäude": ["n-ergie", "energie", "heizung", "grundsteuer", "reinigung", "hausmeister", "müll"],
+      "Strom & Energie": ["strom", "gas", "fernwärme"],
+      "Versicherungen": ["versicherung", "arag", "vdek", "allianz", "signal", "haftpflicht"],
+      "Reparaturen": ["reparatur", "instandhaltung", "wartung"],
+      
+      // C. Zweckbetriebe
+      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
+      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
+      "Übungsleiter": ["übungsleiter", "uebungsleiter", "übungsleiter-tätigkeit", "uel"],
+      "Ehrenamtspauschale": ["ehrenamtspauschale", "ehrenamt"],
+      "Aufwandsentschädigung": ["aufwandsentschädigung", "aufwand", "auslagen"],
+      "Trainer & Schiedsrichter": ["trainer", "schiedsrichter", "lohn"],
+      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug", "sport", "ball", "trikot"],
+      "Sportkleidung": ["trikot", "dress", "sportbekleidung", "kleidung"],
+      "Platzpflege": ["platzpflege", "rasen", "mäher", "dünger"],
+      "Teilnehmergebühren": ["teilnehmer", "kurs", "training"],
+      
+      // D. Wirtschaftlicher Geschäftsbetrieb
+      "Sponsoring": ["sponsoring", "sponsor", "werbung"],
+      "Bandenwerbung": ["bande", "bandenwerbung"],
+      "Bewirtung": ["bewirtung", "getränke", "speisen", "catering"],
+      "Wareneinkauf": ["einkauf", "waren", "getränkehandel", "brauerei"],
     };
 
     for (const [catName, keywords] of Object.entries(mapping)) {
       if (keywords.some(k => desc.includes(k))) {
         const cat = cats.find(c => c.name === catName);
         if (cat) {
-          // If it's a category that exists for both income and expense, check amount
-          if (catName === "Veranstaltungen (Einnahmen)" && tx.amount < 0) continue;
-          if (catName === "Veranstaltungen (Ausgaben)" && tx.amount > 0) continue;
+          // Check if category type matches transaction direction
+          if (cat.type === 'income' && tx.amount < 0) continue;
+          if (cat.type === 'expense' && tx.amount > 0) continue;
           
           return await this.updateTransaction(transactionId, { categoryId: cat.id });
         }
