@@ -10,6 +10,7 @@ export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type", { enum: ["income", "expense"] }).notNull(),
+  fiscalArea: text("fiscal_area", { enum: ["ideell", "vermoegensverwaltung", "zweckbetrieb", "wirtschaftlich"] }).default("ideell"),
   isDefault: boolean("is_default").default(false),
 });
 

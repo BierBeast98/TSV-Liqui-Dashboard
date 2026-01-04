@@ -8,6 +8,7 @@ import Home from "@/pages/Home";
 import Transactions from "@/pages/Transactions";
 import Categories from "@/pages/Categories";
 import Forecast from "@/pages/Forecast";
+import EuerReport from "@/pages/EuerReport";
 import Login from "@/pages/Login";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/transactions" component={() => <ProtectedRoute component={Transactions} />} />
       <Route path="/categories" component={() => <ProtectedRoute component={Categories} />} />
       <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />
+      <Route path="/euer" component={() => <ProtectedRoute component={EuerReport} />} />
       <Route path="/login" component={Login} />
       <Route component={NotFound} />
     </Switch>

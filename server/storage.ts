@@ -48,6 +48,24 @@ export interface IStorage extends IAuthStorage {
   getTotalStats(year: number, account?: string): Promise<{ income: number, expenses: number }>;
   autoCategorize(transactionId: number): Promise<Transaction | undefined>;
   deleteAllTransactions(): Promise<void>;
+  getFiscalAreaStats(year: number): Promise<FiscalAreaReport>;
+}
+
+export interface FiscalAreaSummary {
+  name: string;
+  label: string;
+  income: number;
+  expenses: number;
+  net: number;
+  categories: { name: string; amount: number; type: string }[];
+}
+
+export interface FiscalAreaReport {
+  year: number;
+  areas: FiscalAreaSummary[];
+  totalIncome: number;
+  totalExpenses: number;
+  totalNet: number;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -82,21 +100,63 @@ export class DatabaseStorage implements IStorage {
     const count = await db.select({ count: sql<number>`count(*)` }).from(categories);
     if (Number(count[0].count) === 0) {
       const defaultCategories = [
-        { name: "Mitgliedsbeiträge", type: "income", isDefault: true },
-        { name: "Spenden", type: "income", isDefault: true },
-        { name: "Veranstaltungen", type: "income", isDefault: true },
-        { name: "Zuschüsse", type: "income", isDefault: true },
-        { name: "Sponsoring", type: "income", isDefault: true },
-        { name: "Sportbetrieb", type: "expense", isDefault: true },
-        { name: "Platz & Gebäude", type: "expense", isDefault: true },
-        { name: "Geräte & Material", type: "expense", isDefault: true },
-        { name: "Trainer & Personal", type: "expense", isDefault: true },
-        { name: "Versicherungen", type: "expense", isDefault: true },
-        { name: "Verbandsabgaben", type: "expense", isDefault: true },
-        { name: "Verwaltung & Büro", type: "expense", isDefault: true },
-        { name: "Bankgebühren", type: "expense", isDefault: true },
-        { name: "Steuern", type: "expense", isDefault: true },
-        { name: "Sonstiges", type: "expense", isDefault: true },
+        // A. Ideeller Tätigkeitsbereich - Einnahmen
+        { name: "Mitgliedsbeiträge", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Spenden", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Zuschüsse", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Abteilungsbeiträge", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Förderverein", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Stiftungen", type: "income", fiscalArea: "ideell", isDefault: true },
+        { name: "Sonstige Einnahmen", type: "income", fiscalArea: "ideell", isDefault: true },
+        // A. Ideeller Tätigkeitsbereich - Ausgaben
+        { name: "Verbandsabgaben", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Büromaterial & Porto", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Mitgliederpflege", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Ehrungen & Geschenke", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Bankgebühren", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Steuern", type: "expense", fiscalArea: "ideell", isDefault: true },
+        { name: "Sonstige Ausgaben", type: "expense", fiscalArea: "ideell", isDefault: true },
+        
+        // B. Vermögensverwaltung - Einnahmen
+        { name: "Pachteinnahmen", type: "income", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Nebenkosten-Abrechnung", type: "income", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Zinserträge", type: "income", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        // B. Vermögensverwaltung - Ausgaben
+        { name: "Platz & Gebäude", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Versicherungen", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Abschreibungen", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Darlehenszinsen", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Strom & Energie", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Wasser & Heizung", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        { name: "Reparaturen", type: "expense", fiscalArea: "vermoegensverwaltung", isDefault: true },
+        
+        // C. Zweckbetriebe - Einnahmen
+        { name: "Veranstaltungen (Einnahmen)", type: "income", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Eintrittsgelder", type: "income", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Startgelder", type: "income", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Teilnehmergebühren", type: "income", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Spielerablöse", type: "income", fiscalArea: "zweckbetrieb", isDefault: true },
+        // C. Zweckbetriebe - Ausgaben
+        { name: "Veranstaltungen (Ausgaben)", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Trainer & Schiedsrichter", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Geräte & Material", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Übungsleiter", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Aufwandsentschädigung", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Ehrenamtspauschale", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Schiedsrichter", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Sportkleidung", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Platzpflege", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        { name: "Fahrzeugkosten", type: "expense", fiscalArea: "zweckbetrieb", isDefault: true },
+        
+        // D. Wirtschaftlicher Geschäftsbetrieb - Einnahmen
+        { name: "Sponsoring", type: "income", fiscalArea: "wirtschaftlich", isDefault: true },
+        { name: "Bewirtung", type: "income", fiscalArea: "wirtschaftlich", isDefault: true },
+        { name: "Bandenwerbung", type: "income", fiscalArea: "wirtschaftlich", isDefault: true },
+        { name: "Bannerwerbung", type: "income", fiscalArea: "wirtschaftlich", isDefault: true },
+        { name: "PV-Einspeisevergütung", type: "income", fiscalArea: "wirtschaftlich", isDefault: true },
+        // D. Wirtschaftlicher Geschäftsbetrieb - Ausgaben
+        { name: "Wareneinkauf", type: "expense", fiscalArea: "wirtschaftlich", isDefault: true },
+        { name: "Werbekosten", type: "expense", fiscalArea: "wirtschaftlich", isDefault: true },
       ];
       // @ts-ignore
       await db.insert(categories).values(defaultCategories);
@@ -367,6 +427,68 @@ export class DatabaseStorage implements IStorage {
       console.error("Storage: Error deleting all transactions:", e);
       throw e;
     }
+  }
+
+  async getFiscalAreaStats(year: number): Promise<FiscalAreaReport> {
+    const allTx = await this.getTransactions({ year });
+    const cats = await this.getCategories();
+    
+    const catMap = new Map(cats.map(c => [c.id, c]));
+    
+    const fiscalAreas = [
+      { name: 'ideell', label: 'A. Ideeller Tätigkeitsbereich' },
+      { name: 'vermoegensverwaltung', label: 'B. Vermögensverwaltung' },
+      { name: 'zweckbetrieb', label: 'C. Zweckbetriebe' },
+      { name: 'wirtschaftlich', label: 'D. Wirtschaftlicher Geschäftsbetrieb' }
+    ];
+
+    const areas: FiscalAreaSummary[] = fiscalAreas.map(area => {
+      const areaCats = cats.filter(c => c.fiscalArea === area.name);
+      const catIds = new Set(areaCats.map(c => c.id));
+      
+      const areaTx = allTx.filter(tx => tx.categoryId && catIds.has(tx.categoryId));
+      
+      let income = 0;
+      let expenses = 0;
+      const catStats = new Map<number, { name: string; amount: number; type: string }>();
+      
+      for (const tx of areaTx) {
+        const cat = catMap.get(tx.categoryId!);
+        if (!cat) continue;
+        
+        const absAmount = Math.abs(tx.amount);
+        if (cat.type === 'income') {
+          income += absAmount;
+        } else {
+          expenses += absAmount;
+        }
+        
+        if (!catStats.has(cat.id)) {
+          catStats.set(cat.id, { name: cat.name, amount: 0, type: cat.type });
+        }
+        catStats.get(cat.id)!.amount += absAmount;
+      }
+      
+      return {
+        name: area.name,
+        label: area.label,
+        income,
+        expenses,
+        net: income - expenses,
+        categories: Array.from(catStats.values()).sort((a, b) => b.amount - a.amount)
+      };
+    });
+
+    const totalIncome = areas.reduce((sum, a) => sum + a.income, 0);
+    const totalExpenses = areas.reduce((sum, a) => sum + a.expenses, 0);
+
+    return {
+      year,
+      areas,
+      totalIncome,
+      totalExpenses,
+      totalNet: totalIncome - totalExpenses
+    };
   }
 }
 

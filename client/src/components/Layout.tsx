@@ -8,7 +8,7 @@ import {
   LogOut, 
   User,
   Menu,
-  X
+  FileText
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/transactions", icon: Receipt, label: "Transactions" },
-    { href: "/categories", icon: Tags, label: "Categories" },
-    { href: "/forecast", icon: TrendingUp, label: "Forecast" },
+    { href: "/transactions", icon: Receipt, label: "Buchungen" },
+    { href: "/categories", icon: Tags, label: "Kategorien" },
+    { href: "/euer", icon: FileText, label: "EÜR Bericht" },
+    { href: "/forecast", icon: TrendingUp, label: "Prognose" },
   ];
 
   const NavContent = () => (
@@ -60,7 +61,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="p-4 mt-auto border-t border-border/50">
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-border/50 shadow-sm mb-3">
           <Avatar className="h-9 w-9 border border-border">
-            <AvatarImage src={user?.profileImageUrl} />
+            <AvatarImage src={user?.profileImageUrl || undefined} />
             <AvatarFallback className="bg-primary/10 text-primary font-bold">
               {user?.firstName?.[0] || <User className="w-4 h-4" />}
             </AvatarFallback>

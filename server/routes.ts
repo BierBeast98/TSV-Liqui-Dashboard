@@ -272,6 +272,13 @@ export async function registerRoutes(
     res.json({ updatedCount });
   });
 
+  // EÜR Fiscal Area Summary
+  app.get("/api/report/euer", isAuthenticated, async (req, res) => {
+    const year = Number(req.query.year) || 2024;
+    const fiscalSummary = await storage.getFiscalAreaStats(year);
+    res.json(fiscalSummary);
+  });
+
   app.get(api.dashboard.forecast.path, isAuthenticated, async (req, res) => {
     // Simple linear projection based on average monthly net change
     // Or just project recurring transactions?
