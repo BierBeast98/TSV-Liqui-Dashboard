@@ -1,18 +1,85 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+// Import auth tables to include them in the schema for migrations
+export * from "./models/auth";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// === TABLE DEFINITIONS ===
+
+export const categories = pgTable("categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  isDefault: boolean("is_default").default(false),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
+  date: timestamp("date").notNull(),
+  amount: real("amount").notNull(), // Using real for float amounts
+  description: text("description").notNull(),
+  categoryId: integer("category_id").references(() => categories.id),
+  recurring: boolean("recurring").default(false),
+  hash: text("hash").unique(), // For duplicate detection: hash(date + amount + description)
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// === RELATIONS ===
+// (None strictly required for simple joins, but can be added if using ORM relations)
+
+// === BASE SCHEMAS ===
+export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
+
+// === EXPLICIT API CONTRACT TYPES ===
+
+// Base types
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+
+// Request types
+export type CreateCategoryRequest = InsertCategory;
+export type UpdateCategoryRequest = Partial<InsertCategory>;
+
+export type CreateTransactionRequest = InsertTransaction;
+export type UpdateTransactionRequest = Partial<InsertTransaction>;
+
+// Response types
+export type CategoryResponse = Category;
+export type TransactionResponse = Transaction & { categoryName?: string, categoryType?: string };
+
+// Query Params
+export interface TransactionQueryParams {
+  year?: number;
+  categoryId?: number;
+  type?: 'income' | 'expense';
+  search?: string;
+}
+
+// Stats / Dashboard
+export interface DashboardStats {
+  currentBalance: number;
+  totalIncome: number;
+  totalExpenses: number;
+  netResult: number;
+}
+
+export interface MonthlyStats {
+  month: string; // YYYY-MM
+  income: number;
+  expenses: number;
+}
+
+export interface CategoryStats {
+  name: string;
+  value: number;
+}
+
+export interface ForecastData {
+  date: string;
+  balance: number;
+  isProjected: boolean;
+}
