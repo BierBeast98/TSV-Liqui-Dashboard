@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type CreateTransactionRequest, type UpdateTransactionRequest } from "@shared/routes";
-import { z } from "zod";
+import { api, buildUrl } from "@shared/routes";
+import { type InsertTransaction } from "@shared/schema";
 
 export function useTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }) {
   const queryString = params ? '?' + new URLSearchParams(
@@ -23,13 +23,11 @@ export function useTransactions(params?: { year?: number; categoryId?: number; t
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateTransactionRequest) => {
-      // Validate with input schema before sending
-      const validated = api.transactions.create.input.parse(data);
+    mutationFn: async (data: any) => {
       const res = await fetch(api.transactions.create.path, {
         method: api.transactions.create.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
+        body: JSON.stringify(data),
         credentials: "include",
       });
       if (!res.ok) {
@@ -43,7 +41,7 @@ export function useCreateTransaction() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] }); // Invalidate stats too
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
     },
   });
@@ -52,14 +50,13 @@ export function useCreateTransaction() {
 export function useUpdateTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: number } & UpdateTransactionRequest) => {
+    mutationFn: async ({ id, ...updates }: { id: number } & any) => {
       const url = buildUrl(api.transactions.update.path, { id });
-      const validated = api.transactions.update.input.parse(updates);
       
       const res = await fetch(url, {
         method: api.transactions.update.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
+        body: JSON.stringify(updates),
         credentials: "include",
       });
       
@@ -68,25 +65,6 @@ export function useUpdateTransaction() {
          throw new Error("Failed to update transaction");
       }
       return api.transactions.update.responses[200].parse(await res.json());
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
-      queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
-    },
-  });
-}
-
-export function useAutoCategorize() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(api.transactions.autoCategorize.path, {
-        method: api.transactions.autoCategorize.method,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to auto-categorize");
-      return api.transactions.autoCategorize.responses[200].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
@@ -148,25 +126,6 @@ export function useUploadTransactions() {
         throw new Error("Failed to upload file");
       }
       return api.transactions.upload.responses[200].parse(await res.json());
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
-      queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
-    },
-  });
-}
-
-export function useAutoCategorize() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(api.transactions.autoCategorize.path, {
-        method: api.transactions.autoCategorize.method,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to auto-categorize");
-      return api.transactions.autoCategorize.responses[200].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });

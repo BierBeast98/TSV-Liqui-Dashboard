@@ -99,26 +99,11 @@ export class DatabaseStorage implements IStorage {
     if (params?.search) {
       filters.push(sql`${transactions.description} ILIKE ${`%${params.search}%`}`);
     }
-    // Type filtering requires joining with categories, or simple subquery logic if needed. 
-    // For MVP strict adherence, let's keep it simple. If type is needed, we should probably join.
-    // However, the PRD just says "Filters: Year, Category, Income / Expense".
     
-    // If strict type filter is requested, we need to filter by category type
-    // This is easier if we join or fetch relevant category IDs first.
-    if (params?.type) {
-        // Advanced: join
-        // query = db.select().from(transactions).leftJoin(categories, eq(transactions.categoryId, categories.id))...
-        // For now, let's just assume we can filter on joined data if we construct the query that way.
-        // Or simpler: client side filter? No, backend is better.
-        // Let's rely on frontend sending categoryId for specific categories, 
-        // but for "Income/Expense" generic filter, we need a join.
-    }
-
     if (filters.length > 0) {
       query.where(and(...filters));
     }
     
-    // Sort by date desc
     return await query.orderBy(desc(transactions.date));
   }
 
@@ -146,11 +131,8 @@ export class DatabaseStorage implements IStorage {
     let duplicates = 0;
 
     for (const tx of transactionsData) {
-      // Check for duplicate hash
-      // Hash should be generated before calling this, or here.
-      // The PRD says: Hash based on (date + amount + description)
       const hashStr = `${new Date(tx.date).toISOString().split('T')[0]}_${tx.amount}_${tx.description}`;
-      const hash = hashStr; // In a real app, maybe md5 it. String is fine for now.
+      const hash = hashStr;
       
       const existing = await db.select().from(transactions).where(eq(transactions.hash, hash));
       if (existing.length > 0) {
@@ -169,24 +151,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMonthlyStats(year: number): Promise<{ month: string, income: number, expenses: number }[]> {
-    // This would ideally use a raw SQL aggregation for performance
-    // Simulating with JS for MVP speed if dataset is small, or writing complex SQL
-    // Let's use JS aggregation for simplicity in this generated code unless we want to write raw SQL
     const allTx = await this.getTransactions({ year });
-    // We need categories to know income vs expense
     const cats = await this.getCategories();
     const catTypeMap = new Map(cats.map(c => [c.id, c.type]));
 
     const stats = new Map<string, { income: number, expenses: number }>();
     
-    // Initialize months
     for(let i=0; i<12; i++) {
         const m = `${year}-${String(i+1).padStart(2, '0')}`;
         stats.set(m, { income: 0, expenses: 0 });
     }
 
     for (const tx of allTx) {
-        const month = tx.date.toISOString().slice(0, 7); // YYYY-MM
+        const month = tx.date.toISOString().slice(0, 7);
         if (!stats.has(month)) continue;
         
         const type = catTypeMap.get(tx.categoryId || -1);
@@ -201,7 +178,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCategoryStats(year: number): Promise<{ name: string, value: number }[]> {
-    // Similar JS aggregation
     const allTx = await this.getTransactions({ year });
     const cats = await this.getCategories();
     const catNameMap = new Map(cats.map(c => [c.id, c.name]));
@@ -221,30 +197,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBalanceHistory(year: number): Promise<{ date: string, balance: number }[]> {
-    // This is tricky. Balance is cumulative.
-    // Need start balance from previous years? PRD says "Current balance" is a KPI.
-    // For MVP, let's assume 0 start or calculate from ALL history.
-    // Let's calculate from ALL history but filter output for the requested year (or just show year).
-    // Actually PRD says "Balance over time (line chart)". Usually strictly for the filtered period or YTD.
-    
     const allTx = await db.select().from(transactions).orderBy(asc(transactions.date));
     let balance = 0;
     const history: { date: string, balance: number }[] = [];
 
     for (const tx of allTx) {
-        // Assuming income is positive, expense is negative (or stored as such?)
-        // PRD says "amount (float)". Usually expense is negative in CSV or marked as expense.
-        // We'll assume signed values or use category types.
-        // Standard banking CSVs often have signed amounts.
-        // If not, we'd need to check category type. 
-        // BUT: Categories are assigned AFTER import often.
-        // Let's assume the AMOUNT itself tells the sign.
         balance += tx.amount;
-        
         const dateStr = tx.date.toISOString().split('T')[0];
-        // Only push if it's in the requested year (if year param exists)
         if (tx.date.getFullYear() === year) {
-           // Optimize: only last balance per day
            if (history.length > 0 && history[history.length-1].date === dateStr) {
                history[history.length-1].balance = balance;
            } else {
@@ -252,6 +212,17 @@ export class DatabaseStorage implements IStorage {
            }
         }
     }
+    return history;
+  }
+
+  async getTotalStats(year: number): Promise<{ income: number, expenses: number }> {
+     const monthly = await this.getMonthlyStats(year);
+     return monthly.reduce((acc, curr) => ({
+         income: acc.income + curr.income,
+         expenses: acc.expenses + curr.expenses
+     }), { income: 0, expenses: 0 });
+  }
+
   async autoCategorize(transactionId: number): Promise<Transaction | undefined> {
     const tx = await this.getTransaction(transactionId);
     if (!tx || tx.categoryId) return tx;
