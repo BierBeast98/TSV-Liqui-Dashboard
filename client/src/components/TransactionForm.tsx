@@ -163,7 +163,7 @@ export function TransactionForm({ defaultValues, onSubmit, isSubmitting, onCance
             <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border p-4">
               <FormControl>
                 <Checkbox
-                  checked={field.value}
+                  checked={field.value || false}
                   onCheckedChange={field.onChange}
                 />
               </FormControl>
