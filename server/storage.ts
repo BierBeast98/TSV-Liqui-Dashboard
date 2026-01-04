@@ -204,6 +204,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTransaction(id: number): Promise<void> {
+    if (isNaN(id)) return;
     await db.delete(transactions).where(eq(transactions.id, id));
   }
 

@@ -46,6 +46,9 @@ export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
+export type UpdateCategoryRequest = Partial<InsertCategory>;
+export type UpdateTransactionRequest = Partial<InsertTransaction>;
+
 export type TransactionResponse = Transaction & { 
   categoryName?: string; 
   categoryType?: string;

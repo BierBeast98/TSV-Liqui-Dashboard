@@ -152,7 +152,7 @@ export async function registerRoutes(
       if (records.length === 0) return res.json({ imported: 0, duplicates: 0 });
 
       // Identify IBAN column
-      const first = records[0];
+      const first = records[0] as Record<string, string>;
       const ibanKey = Object.keys(first).find(k => {
         const norm = k.toLowerCase().replace(/[^a-z]/g, '');
         return norm === 'ibanauftragskonto' || norm === 'auftragskonto' || norm === 'iban';
@@ -195,8 +195,8 @@ export async function registerRoutes(
           account: account.name, // Legacy support
           hash: "",
           recurring: false
-        };
-      }).filter((r: any): r is InsertTransaction => r !== null && !isNaN(r.amount));
+        } as InsertTransaction;
+      }).filter((r): r is InsertTransaction => r !== null && !isNaN(r.amount));
 
       const result = await storage.createTransactionsBulk(toImport);
       res.json(result);
