@@ -126,9 +126,18 @@ export default function Transactions() {
                 <DialogTitle>Import Transactions</DialogTitle>
                 <DialogDescription>Upload a CSV file from your bank. We'll handle duplicate detection automatically.</DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleUpload} className="space-y-4">
-                <Input type="file" name="file" accept=".csv" required className="cursor-pointer" />
-                <div className="flex justify-end gap-2">
+              <form onSubmit={handleUpload} className="space-y-4 pt-4">
+                <div className="grid w-full items-center gap-1.5">
+                  <Input 
+                    type="file" 
+                    name="file" 
+                    id="csv-upload"
+                    accept=".csv" 
+                    required 
+                    className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" 
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
                   <Button type="submit" disabled={uploadTx.isPending}>
                     {uploadTx.isPending ? "Importing..." : "Import"}
