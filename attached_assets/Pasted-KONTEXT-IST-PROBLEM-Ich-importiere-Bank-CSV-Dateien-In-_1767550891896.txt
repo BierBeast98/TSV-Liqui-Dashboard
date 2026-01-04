@@ -1,0 +1,68 @@
+KONTEXT / IST-PROBLEM:
+- Ich importiere Bank-CSV-Dateien. In jeder CSV steht ein Feld „IBAN-Auftragskonto“ (oder sehr ähnlich benannt).
+- Aktuell werden alle Umsätze im Dashboard einem Konto zugeordnet, obwohl sie aus unterschiedlichen CSVs mit unterschiedlichen IBANs kommen.
+- Ich möchte, dass das Konto im Dashboard automatisch aus dieser IBAN erkannt wird.
+- Der Account-Name soll auf Basis dieser IBAN gesetzt werden (mindestens IBAN als Identifier; optional schöner Name).
+- Wichtig: Auch bereits importierte Buchungen sollen nachträglich korrekt dem passenden Konto zugeordnet werden (Backfill/Migration).
+
+ZIELE (Iteration):
+1) ACCOUNT-MODELLIERUNG / DB
+   - Stelle sicher, dass es eine persistente Accounts-Struktur gibt (z.B. Tabelle accounts).
+   - accounts sollte mindestens haben: id, iban (unique), name (display), created_at.
+   - transactions sollte ein account_id (FK) haben. Falls aktuell nur ein string Feld existiert, migriere sauber auf account_id ODER bleibe konsistent im bestehenden Schema, aber stelle die eindeutige Zuordnung sicher.
+   - Lege Unique-Constraint auf accounts.iban.
+
+2) CSV-IMPORT: AUTO-ERKENNUNG VON IBAN-AUFTRAGSKONTO
+   - Beim CSV-Upload: Parse die Spalte „IBAN-Auftragskonto“.
+   - Für jede importierte Transaktion:
+       a) bestimme iban = value aus „IBAN-Auftragskonto“
+       b) finde oder erstelle dazu einen Account:
+           - if accounts(iban) exists -> reuse
+           - else create: name = entweder iban oder “Konto ****1234” (letzte 4) + iban gespeichert
+       c) setze transaction.account_id auf diesen Account
+   - Kein manuelles Konto-Auswählen mehr nötig, weil IBAN in der Datei vorhanden ist.
+   - Falls CSV-Header variieren: implementiere robustes Matching (z.B. normalize headers: lowercase, remove spaces, umlauts, etc.) und mappe bekannte Varianten:
+       - "IBAN-Auftragskonto", "IBAN Auftragskonto", "Auftragskonto IBAN", etc.
+   - Wenn die IBAN-Spalte ausnahmsweise fehlt: Import abbrechen mit klarer Fehlermeldung (MVP).
+
+3) BACKFILL / MIGRATION FÜR BEREITS IMPORTIERTE BUCHUNGEN
+   - Implementiere ein Migration-Script oder einmalige Routine:
+       - Für alle bestehenden transactions ohne korrekte account_id:
+           - bestimme iban aus gespeicherten Feldern (falls vorhanden). Falls Import die IBAN bislang NICHT gespeichert hat:
+             -> Dann erweitere transactions um ein Feld account_iban_raw (text) und befülle es beim Import ab jetzt.
+             -> Für alte Transaktionen: Wenn die IBAN im Datensatz nicht vorhanden ist, versuche sie aus einem import_meta/filename mapping zu rekonstruieren, falls so etwas existiert. Wenn nicht möglich, markiere diese Transaktionen als “Unassigned” und zeige sie im UI zur manuellen Zuordnung.
+       - Ziel: Nach Migration sind Transaktionen mit bekannter IBAN sauber Accounts zugeordnet.
+   - Dokumentiere kurz, wie ich die Migration ausführe (z.B. beim Start automatisch einmalig oder per CLI).
+
+4) UI: TRANSACTIONS FILTER (wie im Screenshot)
+   Implementiere/verbessere Filter:
+   - Konto: Dropdown (aus accounts.name) + optional “Alle Konten”
+   - Kategorie: Dropdown + “Alle Kategorien”
+   - Amount: von/bis (Range)
+   - Datum: von/bis (Range)
+   - Description: Search contains (case-insensitive)
+   - Jahr Filter bleibt, aber muss mit Date Range kombinierbar sein
+   - Reset Filters Button
+   - Kombinierte Filter = AND-Logik
+   - Tabelle zeigt die Spalte “Konto” korrekt (accounts.name)
+
+5) AKZEPTANZKRITERIEN / TESTS (manuell)
+   - Import CSV mit IBAN X erstellt/reused Account X und ordnet alle Transaktionen korrekt zu.
+   - Import CSV mit IBAN Y erzeugt zweiten Account; Transactions erscheinen unter richtigem Konto.
+   - Filter Konto=Account X zeigt nur Transactions dieses Accounts.
+   - Backfill: Nach Migration sind bereits importierte Buchungen den richtigen Accounts zugeordnet (wo IBAN vorhanden/re-konstruierbar).
+   - Falls IBAN nicht rekonstruierbar: diese Buchungen sind klar erkennbar als “Unassigned” und können manuell zugeordnet werden.
+
+VORGEHEN:
+- Analysiere zuerst vorhandene Dateien: CSV Import, DB Schema, Transactions UI.
+- Implementiere dann in Reihenfolge:
+  1) DB/Model Anpassung + Migration
+  2) CSV Import (IBAN-Auftragskonto parsing & account mapping)
+  3) Backfill Routine
+  4) Filter UI + Query-Logik
+- Nenne am Ende: Welche Dateien geändert wurden + kurze Run/Testing Steps.
+
+WICHTIG:
+- Keine großen Refactorings ohne Not.
+- Halte dich an den bestehenden Code-Stil und Komponenten.
+- Robust gegen leicht unterschiedliche CSV-Header.

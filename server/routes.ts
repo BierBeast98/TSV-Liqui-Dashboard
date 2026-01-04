@@ -51,12 +51,19 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // === Accounts ===
+  app.get("/api/accounts", isAuthenticated, async (req, res) => {
+    const accs = await storage.getAccounts();
+    res.json(accs);
+  });
+
   // === Transactions ===
   app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
     const query = req.query as any;
     const params = {
       year: query.year ? Number(query.year) : undefined,
       categoryId: query.categoryId ? Number(query.categoryId) : undefined,
+      accountId: query.accountId ? Number(query.accountId) : undefined,
       account: query.account,
       search: query.search,
       startDate: query.startDate,
@@ -125,7 +132,6 @@ export async function registerRoutes(
 
   app.post(api.transactions.upload.path, isAuthenticated, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send("No file uploaded");
-    const targetAccount = req.body.account || "Hauptkonto";
     
     try {
       const csvContent = req.file.buffer.toString('utf8');
@@ -138,6 +144,22 @@ export async function registerRoutes(
         relax_column_count: true
       });
 
+      if (records.length === 0) return res.json({ imported: 0, duplicates: 0 });
+
+      // Identify IBAN column
+      const first = records[0];
+      const ibanKey = Object.keys(first).find(k => {
+        const norm = k.toLowerCase().replace(/[^a-z]/g, '');
+        return norm === 'ibanauftragskonto' || norm === 'auftragskonto' || norm === 'iban';
+      });
+
+      if (!ibanKey) {
+        return res.status(400).json({ message: "Keine IBAN-Spalte (Auftragskonto) in der CSV gefunden." });
+      }
+
+      const iban = first[ibanKey];
+      const account = await storage.getOrCreateAccount(iban);
+
       const toImport: InsertTransaction[] = records.map((r: any) => {
         const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
         const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
@@ -146,21 +168,26 @@ export async function registerRoutes(
         if (!dateStr || !amountStr) return null;
 
         let date: Date;
-        if (dateStr.includes('.')) {
+        if (typeof dateStr === 'string' && dateStr.includes('.')) {
           const [day, month, year] = dateStr.split('.');
           date = new Date(`${year}-${month}-${day}`);
         } else {
           date = new Date(dateStr);
         }
 
-        let amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
-        if (isNaN(amount)) amount = parseFloat(amountStr);
+        let amount = 0;
+        if (typeof amountStr === 'string') {
+          amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
+        } else {
+          amount = Number(amountStr);
+        }
 
         return {
           date: date,
           amount: amount,
-          description: descStr || "No description",
-          account: targetAccount,
+          description: String(descStr || "No description"),
+          accountId: account.id,
+          account: account.name, // Legacy support
           hash: "",
           recurring: false
         };
@@ -174,7 +201,21 @@ export async function registerRoutes(
     }
   });
 
-  // === Dashboard & Forecast ===
+  app.get("/api/migration/backfill", isAuthenticated, async (req, res) => {
+    const txs = await storage.getTransactions();
+    let migratedCount = 0;
+    
+    // Create default account if needed
+    const defaultAccount = await storage.getOrCreateAccount("LEGACY", "Altkonto / Unassigned");
+
+    for (const tx of txs) {
+      if (!tx.accountId) {
+        await storage.updateTransaction(tx.id, { accountId: defaultAccount.id });
+        migratedCount++;
+      }
+    }
+    res.json({ migratedCount });
+  });
   app.get(api.dashboard.stats.path, isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const account = req.query.account as string | undefined;

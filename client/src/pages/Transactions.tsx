@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
@@ -46,6 +47,7 @@ export default function Transactions() {
   const [year, setYear] = useState<number>(2024);
   const [categoryId, setCategoryId] = useState<string>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [accountId, setAccountId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
@@ -56,21 +58,24 @@ export default function Transactions() {
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
+  const { data: accounts } = useQuery<any[]>({ queryKey: ["/api/accounts"] });
+
   const { data: transactions, isLoading } = useTransactions({ 
     year, 
     categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
-    account: accountFilter !== "all" ? accountFilter : undefined,
+    accountId: accountId !== "all" ? Number(accountId) : undefined,
     search: search || undefined,
     minAmount: minAmount ? Number(minAmount) : undefined,
     maxAmount: maxAmount ? Number(maxAmount) : undefined,
     startDate: startDate || undefined,
     endDate: endDate || undefined,
-  }) as { data: (any & { categoryName?: string, categoryType?: string })[], isLoading: boolean };
+  } as any) as any;
 
   const resetFilters = () => {
     setYear(2024);
     setCategoryId("all");
     setAccountFilter("all");
+    setAccountId("all");
     setSearch("");
     setMinAmount("");
     setMaxAmount("");
@@ -292,16 +297,16 @@ export default function Transactions() {
               </SelectContent>
             </Select>
 
-            <Select value={accountFilter} onValueChange={setAccountFilter}>
+            <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger className="w-[160px] rounded-lg">
                 <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Konto" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Konten</SelectItem>
-                <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
-                <SelectItem value="Sparkonto">Sparkonto</SelectItem>
-                <SelectItem value="Handkasse">Handkasse</SelectItem>
+                {accounts?.map((acc) => (
+                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
@@ -417,9 +422,15 @@ export default function Transactions() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="font-normal bg-muted/50">
-                      {tx.account || "Hauptkonto"}
-                    </Badge>
+                    {tx.accountName ? (
+                      <Badge variant="secondary" className="font-normal bg-muted/50">
+                        {tx.accountName}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="font-normal bg-muted/50">
+                        {tx.account || "Hauptkonto"}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {tx.categoryName ? (

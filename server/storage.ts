@@ -1,9 +1,10 @@
 import { db } from "./db";
 import { 
-  categories, transactions,
+  categories, transactions, accounts,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
-  type UpdateCategoryRequest, type UpdateTransactionRequest
+  type UpdateCategoryRequest, type UpdateTransactionRequest,
+  type Account, type TransactionResponse
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -17,17 +18,23 @@ export interface IStorage extends IAuthStorage {
   deleteCategory(id: number): Promise<void>;
   seedCategories(): Promise<void>;
 
+  // Accounts
+  getAccounts(): Promise<Account[]>;
+  getAccountByIban(iban: string): Promise<Account | undefined>;
+  getOrCreateAccount(iban: string, name?: string): Promise<Account>;
+
   // Transactions
   getTransactions(params?: { 
     year?: number; 
     categoryId?: number; 
+    accountId?: number;
     account?: string; 
     search?: string;
     startDate?: string;
     endDate?: string;
     minAmount?: number;
     maxAmount?: number;
-  }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]>;
+  }): Promise<TransactionResponse[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: UpdateTransactionRequest): Promise<Transaction>;
@@ -95,31 +102,53 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getAccounts(): Promise<Account[]> {
+    return await db.select().from(accounts).orderBy(accounts.name);
+  }
+
+  async getAccountByIban(iban: string): Promise<Account | undefined> {
+    const [account] = await db.select().from(accounts).where(eq(accounts.iban, iban));
+    return account;
+  }
+
+  async getOrCreateAccount(iban: string, name?: string): Promise<Account> {
+    const existing = await this.getAccountByIban(iban);
+    if (existing) return existing;
+
+    const displayName = name || `Konto ****${iban.slice(-4)}`;
+    const [newAccount] = await db.insert(accounts).values({ iban, name: displayName }).returning();
+    return newAccount;
+  }
+
   async getTransactions(params?: { 
     year?: number; 
     categoryId?: number; 
+    accountId?: number;
     account?: string; 
     search?: string;
     startDate?: string;
     endDate?: string;
     minAmount?: number;
     maxAmount?: number;
-  }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]> {
+  }): Promise<TransactionResponse[]> {
     let query = db.select({
       id: transactions.id,
       date: transactions.date,
       amount: transactions.amount,
       description: transactions.description,
       categoryId: transactions.categoryId,
+      accountId: transactions.accountId,
       account: transactions.account,
       recurring: transactions.recurring,
       hash: transactions.hash,
       createdAt: transactions.createdAt,
       categoryName: categories.name,
-      categoryType: categories.type
+      categoryType: categories.type,
+      accountName: accounts.name
     })
     .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id));
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(accounts, eq(transactions.accountId, accounts.id));
 
     const filters = [];
 
@@ -128,6 +157,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (params?.categoryId) {
       filters.push(eq(transactions.categoryId, params.categoryId));
+    }
+    if (params?.accountId) {
+      filters.push(eq(transactions.accountId, params.accountId));
     }
     if (params?.account && params.account !== "all") {
       filters.push(eq(transactions.account, params.account));
@@ -152,7 +184,7 @@ export class DatabaseStorage implements IStorage {
       query.where(and(...filters));
     }
     
-    return await query.orderBy(desc(transactions.date)) as (Transaction & { categoryName?: string; categoryType?: string })[];
+    return await query.orderBy(desc(transactions.date)) as TransactionResponse[];
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -212,10 +244,13 @@ export class DatabaseStorage implements IStorage {
     }
 
     for (const tx of allTx) {
-        const month = tx.date.toISOString().slice(0, 7);
+        const dateObj = new Date(tx.date);
+        if (isNaN(dateObj.getTime())) continue;
+        const month = dateObj.toISOString().slice(0, 7);
         if (!stats.has(month)) continue;
         
-        const type = catTypeMap.get(tx.categoryId || -1);
+        const categoryId = tx.categoryId;
+        const type = categoryId ? catTypeMap.get(categoryId) : null;
         if (type === 'income' || (!type && tx.amount > 0)) {
             stats.get(month)!.income += tx.amount;
         } else if (type === 'expense' || (!type && tx.amount < 0)) {
@@ -247,6 +282,7 @@ export class DatabaseStorage implements IStorage {
 
   async getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]> {
     let query = db.select().from(transactions).orderBy(asc(transactions.date));
+    // Filter by account string or accountId if we had it, but for compatibility keep account string for now
     if (account && account !== "all") {
       query.where(eq(transactions.account, account));
     }
@@ -256,8 +292,10 @@ export class DatabaseStorage implements IStorage {
 
     for (const tx of allTx) {
         balance += tx.amount;
-        const dateStr = tx.date.toISOString().split('T')[0];
-        if (tx.date.getFullYear() === year) {
+        const dateObj = new Date(tx.date);
+        if (isNaN(dateObj.getTime())) continue;
+        const dateStr = dateObj.toISOString().split('T')[0];
+        if (dateObj.getFullYear() === year) {
            if (history.length > 0 && history[history.length-1].date === dateStr) {
                history[history.length-1].balance = balance;
            } else {

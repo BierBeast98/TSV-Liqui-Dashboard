@@ -13,46 +13,44 @@ export const categories = pgTable("categories", {
   isDefault: boolean("is_default").default(false),
 });
 
+export const accounts = pgTable("accounts", {
+  id: serial("id").primaryKey(),
+  iban: text("iban").notNull().unique(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   date: timestamp("date").notNull(),
   amount: real("amount").notNull(), // Using real for float amounts
   description: text("description").notNull(),
   categoryId: integer("category_id").references(() => categories.id),
-  account: text("account").default("Hauptkonto"), // New field for account distinction
+  accountId: integer("account_id").references(() => accounts.id),
+  account: text("account").default("Hauptkonto"), // Legacy field
   recurring: boolean("recurring").default(false),
   hash: text("hash").unique(), // For duplicate detection: hash(date + amount + description)
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// === RELATIONS ===
-// (None strictly required for simple joins, but can be added if using ORM relations)
-
-// === BASE SCHEMAS ===
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
+export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactions, {
   date: z.coerce.date(),
 }).omit({ id: true, createdAt: true });
 
-// === EXPLICIT API CONTRACT TYPES ===
-
-// Base types
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
-
+export type Account = typeof accounts.$inferSelect;
+export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type Transaction = typeof transactions.$inferSelect;
-export type InsertTransaction = typeof transactions.$inferInsert;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
-// Request types
-export type CreateCategoryRequest = InsertCategory;
-export type UpdateCategoryRequest = Partial<InsertCategory>;
-
-export type CreateTransactionRequest = InsertTransaction;
-export type UpdateTransactionRequest = Partial<InsertTransaction>;
-
-// Response types
-export type CategoryResponse = Category;
-export type TransactionResponse = Transaction & { categoryName?: string, categoryType?: string };
+export type TransactionResponse = Transaction & { 
+  categoryName?: string; 
+  categoryType?: string;
+  accountName?: string;
+};
 
 // Query Params
 export interface TransactionQueryParams {
