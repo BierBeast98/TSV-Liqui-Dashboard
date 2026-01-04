@@ -305,7 +305,7 @@ export default function Transactions() {
               <SelectContent>
                 <SelectItem value="all">Alle Konten</SelectItem>
                 {accounts?.map((acc) => (
-                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name}</SelectItem>
+                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name} ({acc.iban})</SelectItem>
                 ))}
               </SelectContent>
             </Select>

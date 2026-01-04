@@ -282,9 +282,14 @@ export class DatabaseStorage implements IStorage {
 
   async getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]> {
     let query = db.select().from(transactions).orderBy(asc(transactions.date));
-    // Filter by account string or accountId if we had it, but for compatibility keep account string for now
+    
     if (account && account !== "all") {
-      query.where(eq(transactions.account, account));
+      // Check if it's a numeric ID (new accountId) or a string (legacy account name)
+      if (!isNaN(Number(account))) {
+        query.where(eq(transactions.accountId, Number(account)));
+      } else {
+        query.where(eq(transactions.account, account));
+      }
     }
     const allTx = await query;
     let balance = 0;
