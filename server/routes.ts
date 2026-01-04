@@ -135,7 +135,10 @@ export async function registerRoutes(
       console.log("Delete all transactions requested");
       await storage.deleteAllTransactions();
       console.log("All transactions deleted from storage");
-      res.status(204).send();
+      
+      // Explicitly clear session state or any other server-side cache if it exists
+      // In this case, just ensuring a clean 200 response with data might help some clients
+      res.status(200).json({ message: "All transactions deleted successfully" });
     } catch (e) {
       console.error("Error in delete all route:", e);
       res.status(500).send(e instanceof Error ? e.message : "Unknown error");

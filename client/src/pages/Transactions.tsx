@@ -142,11 +142,13 @@ export default function Transactions() {
           throw new Error(`Fehler beim Löschen: ${errorText}`);
         }
         
-        console.log("UI: Deletion successful, invalidating queries");
-        await queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-        await queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-        await queryClient.invalidateQueries({ queryKey: ["/api/charts"] });
-        await queryClient.refetchQueries({ queryKey: ["/api/transactions"] });
+        console.log("UI: Deletion successful, force clearing all caches");
+        
+        // Hard reset of the query client state
+        queryClient.clear();
+        
+        // Use window location reload as a last resort to ensure fresh state
+        window.location.reload();
         
         toast({ title: "Gelöscht", description: "Alle Transaktionen wurden erfolgreich entfernt." });
       } catch (error: any) {
