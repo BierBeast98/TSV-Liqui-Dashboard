@@ -132,16 +132,13 @@ export async function registerRoutes(
 
   app.delete("/api/transactions/all", isAuthenticated, async (req, res) => {
     try {
-      console.log("Delete all transactions requested");
+      console.log("DELETE ALL: Request received");
       await storage.deleteAllTransactions();
-      console.log("All transactions deleted from storage");
-      
-      // Explicitly clear session state or any other server-side cache if it exists
-      // In this case, just ensuring a clean 200 response with data might help some clients
-      res.status(200).json({ message: "All transactions deleted successfully" });
+      console.log("DELETE ALL: Success");
+      res.status(200).json({ status: "success", message: "All transactions deleted" });
     } catch (e) {
-      console.error("Error in delete all route:", e);
-      res.status(500).send(e instanceof Error ? e.message : "Unknown error");
+      console.error("DELETE ALL: Error", e);
+      res.status(500).json({ status: "error", message: e instanceof Error ? e.message : "Unknown error" });
     }
   });
 

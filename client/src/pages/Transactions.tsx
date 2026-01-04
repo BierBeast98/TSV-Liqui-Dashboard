@@ -133,13 +133,18 @@ export default function Transactions() {
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
+    if (!window.confirm("Möchten Sie wirklich ALLE Transaktionen unwiderruflich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.")) {
       return;
     }
 
     try {
       console.log("UI: Requesting deletion of all transactions");
-      const response = await fetch("/api/transactions/all", { method: "DELETE" });
+      const response = await fetch("/api/transactions/all", { 
+        method: "DELETE",
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -148,13 +153,15 @@ export default function Transactions() {
       
       console.log("UI: Deletion successful, force clearing all caches");
       
-      // Hard reset of the query client state
+      // Use queryClient from props if available or global one
       queryClient.clear();
       
-      // Use window location reload as a last resort to ensure fresh state
-      window.location.reload();
-      
       toast({ title: "Gelöscht", description: "Alle Transaktionen wurden erfolgreich entfernt." });
+      
+      // Delay reload to let toast show
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (error: any) {
       console.error("UI: Error deleting transactions:", error);
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
