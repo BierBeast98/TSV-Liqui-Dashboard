@@ -61,7 +61,20 @@ export async function registerRoutes(
   app.post(api.transactions.create.path, isAuthenticated, async (req, res) => {
     try {
       const input = api.transactions.create.input.parse(req.body);
-      const tx = await storage.createTransaction(input);
+      
+      // Calculate hash for single transaction to prevent duplicates
+      const dateStr = new Date(input.date).toISOString().split('T')[0];
+      const accountStr = input.account || "Hauptkonto";
+      const hash = `${dateStr}_${input.amount}_${input.description}_${accountStr}`;
+
+      const existing = await storage.getTransactions({ search: input.description });
+      const duplicate = existing.find(t => t.hash === hash);
+      
+      if (duplicate) {
+        return res.status(409).json({ message: "Transaktion existiert bereits (Duplikat erkannt)" });
+      }
+
+      const tx = await storage.createTransaction({ ...input, hash });
       await storage.autoCategorize(tx.id);
       const updatedTx = await storage.getTransaction(tx.id);
       res.status(201).json(updatedTx || tx);

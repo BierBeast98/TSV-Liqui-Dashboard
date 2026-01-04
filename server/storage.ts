@@ -149,8 +149,10 @@ export class DatabaseStorage implements IStorage {
     let duplicates = 0;
 
     for (const tx of transactionsData) {
-      const hashStr = `${new Date(tx.date).toISOString().split('T')[0]}_${tx.amount}_${tx.description}`;
-      const hash = hashStr;
+      // Create a unique hash based on date, amount, description and account
+      const dateStr = new Date(tx.date).toISOString().split('T')[0];
+      const accountStr = tx.account || "Hauptkonto";
+      const hash = `${dateStr}_${tx.amount}_${tx.description}_${accountStr}`;
       
       const existing = await db.select().from(transactions).where(eq(transactions.hash, hash));
       if (existing.length > 0) {
@@ -158,10 +160,9 @@ export class DatabaseStorage implements IStorage {
         continue;
       }
 
-      await db.insert(transactions).values({ ...tx, hash });
-      const [inserted] = await db.select().from(transactions).where(eq(transactions.hash, hash));
-      if (inserted) {
-        await this.autoCategorize(inserted.id);
+      const [insertedTx] = await db.insert(transactions).values({ ...tx, hash }).returning();
+      if (insertedTx) {
+        await this.autoCategorize(insertedTx.id);
       }
       imported++;
     }
