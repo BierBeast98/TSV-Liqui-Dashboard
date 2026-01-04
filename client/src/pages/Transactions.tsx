@@ -43,7 +43,7 @@ export default function Transactions() {
   const [selectedTx, setSelectedTx] = useState<any>(null);
   
   // Filters
-  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [year, setYear] = useState<number>(2024);
   const [categoryId, setCategoryId] = useState<string>("all");
   const [search, setSearch] = useState("");
   
