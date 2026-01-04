@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TransactionForm } from "@/components/TransactionForm";
-import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -48,12 +48,43 @@ export default function Transactions() {
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   
+  // Sort State
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
+
   const { data: transactions, isLoading } = useTransactions({ 
     year, 
     categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
     account: accountFilter !== "all" ? accountFilter : undefined,
     search: search || undefined
   }) as { data: (any & { categoryName?: string, categoryType?: string })[], isLoading: boolean };
+
+  // Sorting Logic
+  const sortedTransactions = [...(transactions || [])].sort((a, b) => {
+    let aValue = a[sortConfig.key];
+    let bValue = b[sortConfig.key];
+
+    // Special handling for categoryName
+    if (sortConfig.key === 'category') {
+      aValue = a.categoryName || '';
+      bValue = b.categoryName || '';
+    }
+
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const toggleSort = (key: string) => {
+    setSortConfig(current => ({
+      key,
+      direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortConfig.key !== column) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-20" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
+  };
   
   const { data: categories } = useCategories();
   const createTx = useCreateTransaction();
@@ -247,11 +278,21 @@ export default function Transactions() {
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-[120px]">Date</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Konto</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('date')}>
+                <div className="flex items-center">Date <SortIcon column="date" /></div>
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('description')}>
+                <div className="flex items-center">Description <SortIcon column="description" /></div>
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('account')}>
+                <div className="flex items-center">Konto <SortIcon column="account" /></div>
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('category')}>
+                <div className="flex items-center">Category <SortIcon column="category" /></div>
+              </TableHead>
+              <TableHead className="text-right cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('amount')}>
+                <div className="flex items-center justify-end">Amount <SortIcon column="amount" /></div>
+              </TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -260,14 +301,14 @@ export default function Transactions() {
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Loading transactions...</TableCell>
               </TableRow>
-            ) : transactions?.length === 0 ? (
+            ) : sortedTransactions?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                   No transactions found. Try adjusting your filters or add a new one.
                 </TableCell>
               </TableRow>
             ) : (
-              transactions?.map((tx) => (
+              sortedTransactions?.map((tx) => (
                 <TableRow key={tx.id} className="group transition-colors hover:bg-muted/30">
                   <TableCell className="font-medium font-mono text-xs text-muted-foreground">
                     {format(new Date(tx.date), "MMM d, yyyy")}
