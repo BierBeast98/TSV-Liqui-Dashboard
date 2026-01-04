@@ -7,8 +7,39 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
+import path from "path";
+import fs from "fs";
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+// PDF upload storage for EÜR reports
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(process.cwd(), 'uploads', 'euer-pdfs');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const year = req.params.year || 'unknown';
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    cb(null, `euer_${year}_${timestamp}${ext}`);
+  }
+});
+
+const pdfUpload = multer({
+  storage: pdfStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur PDF-Dateien erlaubt'));
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -326,6 +357,82 @@ export async function registerRoutes(
   app.delete("/api/euer-reports/:year", isAuthenticated, async (req, res) => {
     await storage.deleteEuerReport(Number(req.params.year));
     res.status(204).send();
+  });
+
+  // PDF Upload for EÜR reports
+  app.post("/api/euer-reports/:year/upload-pdf", isAuthenticated, pdfUpload.single('pdf'), async (req, res) => {
+    try {
+      const year = Number(req.params.year);
+      if (isNaN(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ message: "Ungültiges Jahr" });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ message: "Keine PDF-Datei hochgeladen" });
+      }
+      
+      const user = req.user as any;
+      const uploadedBy = user?.claims?.email || user?.claims?.sub || 'unknown';
+      
+      // Check if report already exists
+      const existingReport = await storage.getEuerReport(year);
+      
+      if (existingReport) {
+        // Update existing report with new file info
+        const updated = await storage.upsertEuerReport({
+          ...existingReport,
+          year,
+          sourceFileName: req.file.originalname,
+          pdfFilePath: req.file.path,
+          uploadedBy,
+        });
+        res.json({ 
+          message: "PDF hochgeladen und Bericht aktualisiert", 
+          report: updated,
+          fileName: req.file.originalname 
+        });
+      } else {
+        // Create new report entry with PDF
+        const report = await storage.upsertEuerReport({
+          year,
+          sourceFileName: req.file.originalname,
+          pdfFilePath: req.file.path,
+          uploadedBy,
+          ideellIncome: 0,
+          ideellExpenses: 0,
+          vermoegenIncome: 0,
+          vermoegenExpenses: 0,
+          zweckbetriebIncome: 0,
+          zweckbetriebExpenses: 0,
+          wirtschaftlichIncome: 0,
+          wirtschaftlichExpenses: 0,
+        });
+        res.json({ 
+          message: "PDF hochgeladen. Bitte die Werte jetzt manuell eintragen.", 
+          report,
+          fileName: req.file.originalname 
+        });
+      }
+    } catch (e) {
+      console.error("Error uploading PDF:", e);
+      res.status(500).json({ message: "Fehler beim Hochladen" });
+    }
+  });
+
+  // Serve uploaded PDFs
+  app.get("/api/euer-reports/:year/pdf", isAuthenticated, async (req, res) => {
+    const year = Number(req.params.year);
+    const report = await storage.getEuerReport(year);
+    
+    if (!report || !report.pdfFilePath) {
+      return res.status(404).json({ message: "Keine PDF-Datei vorhanden" });
+    }
+    
+    if (!fs.existsSync(report.pdfFilePath)) {
+      return res.status(404).json({ message: "PDF-Datei nicht gefunden" });
+    }
+    
+    res.sendFile(report.pdfFilePath);
   });
 
   // EÜR Line Items

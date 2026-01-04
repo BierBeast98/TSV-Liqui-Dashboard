@@ -95,6 +95,7 @@ export const euerReports = pgTable("euer_reports", {
   id: serial("id").primaryKey(),
   year: integer("year").notNull().unique(),
   sourceFileName: text("source_file_name"),
+  pdfFilePath: text("pdf_file_path"),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   uploadedBy: text("uploaded_by"),
   // A. Ideeller Tätigkeitsbereich

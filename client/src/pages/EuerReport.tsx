@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight, Upload, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -112,6 +112,41 @@ export default function EuerReport() {
       toast({ title: "Fehler", description: "Speichern fehlgeschlagen.", variant: "destructive" });
     }
   });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('pdf', file);
+      const res = await fetch(`/api/euer-reports/${year}/upload-pdf`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Upload fehlgeschlagen');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "PDF hochgeladen", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ['/api/report/euer', year] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast({ title: "Fehler", description: "Nur PDF-Dateien erlaubt", variant: "destructive" });
+        return;
+      }
+      uploadMutation.mutate(file);
+    }
+  };
 
   const startEditing = () => {
     if (report && report.source === 'pdf') {
@@ -334,17 +369,35 @@ export default function EuerReport() {
               Zusammenfassung nach den 4 Tätigkeitsbereichen gem. EÜR
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
               <SelectTrigger className="w-[120px]" data-testid="select-year">
                 <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
-                {[2023, 2024, 2025].map(y => (
+                {[2022, 2023, 2024, 2025].map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <div className="relative">
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                data-testid="input-pdf-upload"
+                disabled={uploadMutation.isPending}
+              />
+              <Button variant="outline" disabled={uploadMutation.isPending}>
+                {uploadMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                PDF hochladen
+              </Button>
+            </div>
             <Button variant="outline" onClick={startEditing} data-testid="button-edit">
               <Edit2 className="w-4 h-4 mr-2" />
               Bearbeiten
@@ -368,7 +421,7 @@ export default function EuerReport() {
         ) : (
           <>
             {isPdfData ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                 <FileText className="w-4 h-4" />
                 <span>Quelle: {report?.sourceFileName || 'Manuell erfasst'}</span>
                 {report?.uploadedAt && (
@@ -376,6 +429,16 @@ export default function EuerReport() {
                     (erfasst am {new Date(report.uploadedAt).toLocaleDateString('de-DE')})
                   </span>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.open(`/api/euer-reports/${year}/pdf`, '_blank')}
+                  className="text-xs"
+                  data-testid="button-view-pdf"
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  PDF anzeigen
+                </Button>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
