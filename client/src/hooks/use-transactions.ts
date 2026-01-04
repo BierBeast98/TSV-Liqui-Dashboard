@@ -77,6 +77,25 @@ export function useUpdateTransaction() {
   });
 }
 
+export function useAutoCategorize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.transactions.autoCategorize.path, {
+        method: api.transactions.autoCategorize.method,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to auto-categorize");
+      return api.transactions.autoCategorize.responses[200].parse(await res.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
+    },
+  });
+}
+
 export function useDeleteTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -84,6 +103,25 @@ export function useDeleteTransaction() {
       const url = buildUrl(api.transactions.delete.path, { id });
       const res = await fetch(url, { method: api.transactions.delete.method, credentials: "include" });
       if (!res.ok) throw new Error("Failed to delete transaction");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
+    },
+  });
+}
+
+export function useAutoCategorize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.transactions.autoCategorize.path, {
+        method: api.transactions.autoCategorize.method,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to auto-categorize");
+      return api.transactions.autoCategorize.responses[200].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
@@ -110,6 +148,25 @@ export function useUploadTransactions() {
         throw new Error("Failed to upload file");
       }
       return api.transactions.upload.responses[200].parse(await res.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.charts.path] });
+    },
+  });
+}
+
+export function useAutoCategorize() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.transactions.autoCategorize.path, {
+        method: api.transactions.autoCategorize.method,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to auto-categorize");
+      return api.transactions.autoCategorize.responses[200].parse(await res.json());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });

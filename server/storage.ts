@@ -30,6 +30,7 @@ export interface IStorage extends IAuthStorage {
   getCategoryStats(year: number): Promise<{ name: string, value: number }[]>;
   getBalanceHistory(year: number): Promise<{ date: string, balance: number }[]>;
   getTotalStats(year: number): Promise<{ income: number, expenses: number }>;
+  autoCategorize(transactionId: number): Promise<Transaction | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -66,17 +67,19 @@ export class DatabaseStorage implements IStorage {
       const defaultCategories = [
         { name: "Mitgliedsbeiträge", type: "income", isDefault: true },
         { name: "Spenden", type: "income", isDefault: true },
-        { name: "Veranstaltungen (Einnahmen)", type: "income", isDefault: true },
+        { name: "Veranstaltungen", type: "income", isDefault: true },
         { name: "Zuschüsse", type: "income", isDefault: true },
         { name: "Sponsoring", type: "income", isDefault: true },
-        { name: "Sonstige Einnahmen", type: "income", isDefault: true },
-        { name: "Verbandsabgaben", type: "expense", isDefault: true },
+        { name: "Sportbetrieb", type: "expense", isDefault: true },
         { name: "Platz & Gebäude", type: "expense", isDefault: true },
         { name: "Geräte & Material", type: "expense", isDefault: true },
-        { name: "Veranstaltungen (Ausgaben)", type: "expense", isDefault: true },
-        { name: "Trainer & Schiedsrichter", type: "expense", isDefault: true },
+        { name: "Trainer & Personal", type: "expense", isDefault: true },
         { name: "Versicherungen", type: "expense", isDefault: true },
-        { name: "Sonstige Ausgaben", type: "expense", isDefault: true },
+        { name: "Verbandsabgaben", type: "expense", isDefault: true },
+        { name: "Verwaltung & Büro", type: "expense", isDefault: true },
+        { name: "Bankgebühren", type: "expense", isDefault: true },
+        { name: "Steuern", type: "expense", isDefault: true },
+        { name: "Sonstiges", type: "expense", isDefault: true },
       ];
       // @ts-ignore
       await db.insert(categories).values(defaultCategories);
@@ -156,6 +159,10 @@ export class DatabaseStorage implements IStorage {
       }
 
       await db.insert(transactions).values({ ...tx, hash });
+      const [inserted] = await db.select().from(transactions).where(eq(transactions.hash, hash));
+      if (inserted) {
+        await this.autoCategorize(inserted.id);
+      }
       imported++;
     }
     return { imported, duplicates };
@@ -245,15 +252,39 @@ export class DatabaseStorage implements IStorage {
            }
         }
     }
-    return history;
-  }
+  async autoCategorize(transactionId: number): Promise<Transaction | undefined> {
+    const tx = await this.getTransaction(transactionId);
+    if (!tx || tx.categoryId) return tx;
 
-  async getTotalStats(year: number): Promise<{ income: number, expenses: number }> {
-     const monthly = await this.getMonthlyStats(year);
-     return monthly.reduce((acc, curr) => ({
-         income: acc.income + curr.income,
-         expenses: acc.expenses + curr.expenses
-     }), { income: 0, expenses: 0 });
+    const cats = await this.getCategories();
+    const desc = tx.description.toLowerCase();
+
+    const mapping: Record<string, string[]> = {
+      "Mitgliedsbeiträge": ["beitrag", "mitglied", "jahresbeitrag"],
+      "Spenden": ["spende", "zuwendung", "stiftung"],
+      "Veranstaltungen": ["weihnachtsfeier", "fasching", "turnier", "hallencup", "veranstaltung"],
+      "Sponsoring": ["sponsoring", "werbung"],
+      "Trainer & Personal": ["trainer", "lohn", "schiedsrichter", "uel-verguetung"],
+      "Platz & Gebäude": ["strom", "wasser", "gas", "wärme", "heizung", "pacht", "grundsteuer", "reinigung"],
+      "Bankgebühren": ["abschluss", "zinsen", "gebühr", "entgelt", "buchung", "karte"],
+      "Versicherungen": ["versicherung", "arag", "vdek"],
+      "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv"],
+      "Sportbetrieb": ["sportplatz", "trikot", "ball", "bedarf"],
+      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug"],
+      "Verwaltung & Büro": ["büro", "telefon", "internet", "porto", "brief"],
+      "Steuern": ["finanzamt", "ust", "steuer"],
+    };
+
+    for (const [catName, keywords] of Object.entries(mapping)) {
+      if (keywords.some(k => desc.includes(k))) {
+        const cat = cats.find(c => c.name === catName);
+        if (cat) {
+          return await this.updateTransaction(transactionId, { categoryId: cat.id });
+        }
+      }
+    }
+
+    return tx;
   }
 }
 

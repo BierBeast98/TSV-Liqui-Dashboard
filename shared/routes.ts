@@ -100,6 +100,13 @@ export const api = {
         200: z.object({ imported: z.number(), duplicates: z.number() }),
         400: errorSchemas.validation
       }
+    },
+    autoCategorize: {
+      method: 'POST' as const,
+      path: '/api/transactions/auto-categorize',
+      responses: {
+        200: z.object({ updatedCount: z.number() })
+      }
     }
   },
   dashboard: {

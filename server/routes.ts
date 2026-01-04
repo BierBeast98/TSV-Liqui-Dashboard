@@ -61,7 +61,9 @@ export async function registerRoutes(
     try {
       const input = api.transactions.create.input.parse(req.body);
       const tx = await storage.createTransaction(input);
-      res.status(201).json(tx);
+      await storage.autoCategorize(tx.id);
+      const updatedTx = await storage.getTransaction(tx.id);
+      res.status(201).json(updatedTx || tx);
     } catch (e) {
       if (e instanceof z.ZodError) {
         res.status(400).json({
@@ -182,6 +184,21 @@ export async function registerRoutes(
       categoryDistribution: cats,
       balanceOverTime: balance
     });
+  });
+
+  app.post(api.transactions.autoCategorize.path, isAuthenticated, async (req, res) => {
+    const txs = await storage.getTransactions();
+    const uncategorized = txs.filter(t => !t.categoryId);
+    let updatedCount = 0;
+    
+    for (const tx of uncategorized) {
+      const updated = await storage.autoCategorize(tx.id);
+      if (updated && updated.categoryId) {
+        updatedCount++;
+      }
+    }
+    
+    res.json({ updatedCount });
   });
 
   app.get(api.dashboard.forecast.path, isAuthenticated, async (req, res) => {

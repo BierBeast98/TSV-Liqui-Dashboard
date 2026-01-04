@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
-import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions } from "@/hooks/use-transactions";
+import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
 import { 
   Table, 
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TransactionForm } from "@/components/TransactionForm";
-import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,20 @@ export default function Transactions() {
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
   const uploadTx = useUploadTransactions();
+  const autoCat = useAutoCategorize();
   const { toast } = useToast();
+
+  const handleAutoCategorize = async () => {
+    try {
+      const result = await autoCat.mutateAsync();
+      toast({ 
+        title: "Auto-Kategorisierung", 
+        description: `${result.updatedCount} Transaktionen wurden automatisch kategorisiert.` 
+      });
+    } catch (error: any) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  };
 
   const handleCreate = async (data: any) => {
     try {
@@ -115,6 +128,15 @@ export default function Transactions() {
           <p className="text-muted-foreground mt-1">Manage and track your financial activity.</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2 rounded-xl text-primary border-primary/20 hover:bg-primary/5"
+            onClick={handleAutoCategorize}
+            disabled={autoCat.isPending}
+          >
+            <Sparkles className={`w-4 h-4 ${autoCat.isPending ? 'animate-spin' : ''}`} />
+            Automatisch kategorisieren
+          </Button>
           <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2 rounded-xl">
