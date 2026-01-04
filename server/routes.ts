@@ -131,10 +131,15 @@ export async function registerRoutes(
   });
 
   app.delete("/api/transactions/all", isAuthenticated, async (req, res) => {
-    console.log("Delete all transactions requested");
-    await storage.deleteAllTransactions();
-    console.log("All transactions deleted from storage");
-    res.status(204).send();
+    try {
+      console.log("Delete all transactions requested");
+      await storage.deleteAllTransactions();
+      console.log("All transactions deleted from storage");
+      res.status(204).send();
+    } catch (e) {
+      console.error("Error in delete all route:", e);
+      res.status(500).send(e instanceof Error ? e.message : "Unknown error");
+    }
   });
 
   app.post(api.transactions.upload.path, isAuthenticated, upload.single('file'), async (req, res) => {
