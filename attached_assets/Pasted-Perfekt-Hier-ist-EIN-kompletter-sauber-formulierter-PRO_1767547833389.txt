@@ -1,0 +1,235 @@
+Perfekt 👍
+Hier ist EIN kompletter, sauber formulierter PROMPT, der das gesamte PRD enthält und den du direkt in Replit (oder ein anderes AI-Coding-Tool) kopieren kannst.
+Der Prompt ist bewusst klar, präzise, nicht schwammig und MVP-fokussiert, damit kein Unsinn gebaut wird.
+
+⸻
+
+✅ MASTER-PROMPT: PRD für Finanzdashboard TSV Greding (MVP B)
+
+Role:
+You are a senior full-stack developer and product engineer.
+Build a clean, maintainable MVP according to the following Product Requirements Document (PRD).
+Focus on correctness, clarity, and future extensibility (MVP C-ready), not overengineering.
+
+⸻
+
+PRODUCT OVERVIEW
+
+Build a web-based finance dashboard for a German sports club (TSV Greding e. V.).
+The dashboard allows the club treasurer to upload bank CSV statements, store historical data, analyze income and expenses, and project future liquidity until year-end.
+
+The product replaces manual Excel workflows and provides transparency, analysis, and basic forecasting.
+
+⸻
+
+TARGET USERS
+	•	Primary: Treasurer (admin, full access)
+	•	Secondary (future): Board members (read-only)
+
+⸻
+
+CORE GOALS
+	•	Centralize bank transactions
+	•	Provide clear financial overview
+	•	Enable simple but useful projections
+	•	Be usable within minutes
+	•	Be expandable to a more advanced system later
+
+⸻
+
+SCOPE – MVP B
+
+IN SCOPE
+	•	CSV upload of bank statements
+	•	Persistent data storage
+	•	Categorization of transactions
+	•	Visual dashboards
+	•	Simple financial projections
+
+OUT OF SCOPE (FOR NOW)
+	•	PSD2 live bank connections
+	•	Accounting exports (DATEV)
+	•	Multi-club support
+	•	Mobile app
+
+⸻
+
+TECH STACK (MANDATORY)
+	•	Python
+	•	Streamlit (frontend)
+	•	pandas, numpy
+	•	SQLite (local database)
+	•	Plotly or Altair for charts
+
+⸻
+
+DATA MODEL
+
+transactions
+	•	id (UUID)
+	•	date (date)
+	•	amount (float)
+	•	description (text)
+	•	category_id (foreign key)
+	•	account_id (nullable, future use)
+	•	recurring (boolean)
+	•	created_at (timestamp)
+
+categories
+	•	id
+	•	name
+	•	type (income or expense)
+
+accounts (future-ready)
+	•	id
+	•	name
+	•	bank
+
+⸻
+
+CATEGORIES (PREDEFINED FOR TSV GREDING)
+
+Income
+	•	Mitgliedsbeiträge
+	•	Spenden
+	•	Veranstaltungen
+	•	Zuschüsse
+	•	Sponsoring
+	•	Sonstige Einnahmen
+
+Expenses
+	•	Verbandsabgaben
+	•	Platz & Gebäude
+	•	Geräte & Material
+	•	Veranstaltungen
+	•	Trainer & Schiedsrichter
+	•	Versicherungen
+	•	Sonstige Ausgaben
+
+⸻
+
+CORE FEATURES
+
+1. CSV IMPORT
+	•	Upload CSV files
+	•	Preview data
+	•	Manual column mapping:
+	•	Date
+	•	Amount
+	•	Description
+	•	Detect and ignore duplicate transactions
+	•	Store data persistently in SQLite
+
+Duplicate detection logic:
+	•	Hash based on (date + amount + description)
+
+⸻
+
+2. TRANSACTION MANAGEMENT
+	•	Table view of all transactions
+	•	Editable categories
+	•	Filters:
+	•	Year
+	•	Category
+	•	Income / Expense
+	•	Ability to mark transactions as recurring
+
+⸻
+
+3. DASHBOARD (MAIN VIEW)
+
+KPIs
+	•	Current balance
+	•	Total income (current year)
+	•	Total expenses (current year)
+	•	Net result
+
+Charts
+	•	Income vs expenses (bar chart)
+	•	Balance over time (line chart)
+	•	Category distribution (pie or bar)
+
+⸻
+
+4. FORECASTING MODULE
+
+Assumptions
+	•	Recurring income and expenses repeat monthly
+	•	Historical averages are acceptable for MVP
+
+Logic
+	•	Calculate average monthly income and expenses
+	•	Extrapolate from current date to year-end
+	•	Include recurring transactions explicitly
+
+Output
+	•	Projected year-end balance
+	•	Warning if balance falls below configurable threshold
+
+⸻
+
+UX STRUCTURE (STREAMLIT)
+
+Dashboard
+Data Import
+Transactions
+Categories
+Forecast
+Settings
+
+
+⸻
+
+PROJECT STRUCTURE
+
+/app
+ ├─ app.py
+ ├─ db.py
+ ├─ import_csv.py
+ ├─ analytics.py
+ ├─ forecast.py
+ ├─ categories.py
+ └─ data/
+
+
+⸻
+
+NON-FUNCTIONAL REQUIREMENTS
+	•	Simple and understandable UI
+	•	No accounting jargon
+	•	Fast CSV import (<5s)
+	•	Transparent calculations
+	•	No data loss
+
+⸻
+
+SUCCESS CRITERIA
+	•	Treasurer understands current financial status in <5 minutes
+	•	CSV uploads work without Excel cleanup
+	•	Forecast is usable for board discussions
+
+⸻
+
+EXTENSION PATH (MVP C – DO NOT IMPLEMENT YET)
+	•	Multiple bank accounts
+	•	Scenario simulation (with / without events)
+	•	Alerts
+	•	User roles
+	•	PDF reports
+
+⸻
+
+FINAL INSTRUCTION
+
+Build the MVP strictly according to this PRD.
+Prefer clarity and correctness over complexity.
+Keep the code modular and extensible.
+
+⸻
+
+Wenn du willst, kann ich dir als Nächstes zusätzlich:
+	•	🔹 einen zweiten Prompt nur für die Forecast-Logik schreiben
+	•	🔹 einen Prompt für Tests & Validierung
+	•	🔹 oder den Prompt in kleinere Agent-Prompts aufteilen (Import-Agent, Forecast-Agent etc.)
+
+Sag einfach, wie tief wir weitergehen 🚀
