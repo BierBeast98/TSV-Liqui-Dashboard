@@ -118,6 +118,7 @@ export async function registerRoutes(
         const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
         const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
         const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
+        const accountName = r['Auftragskonto'] || r['Konto'] || r.Account || "Hauptkonto";
         
         if (!dateStr || !amountStr) return null;
 
@@ -136,10 +137,11 @@ export async function registerRoutes(
           date: date,
           amount: amount,
           description: descStr || "No description",
+          account: accountName,
           hash: "",
           recurring: false
         };
-      }).filter((r: any) => r !== null && !isNaN(r.amount));
+      }).filter((r: any): r is InsertTransaction => r !== null && !isNaN(r.amount));
 
       const result = await storage.createTransactionsBulk(toImport);
       res.json(result);
