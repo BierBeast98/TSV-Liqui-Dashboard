@@ -88,9 +88,7 @@ export class DatabaseStorage implements IStorage {
     const filters = [];
 
     if (params?.year) {
-      // Allow year filtering but if transactions are from a different year, ensure they can be seen
-      // Let's log if needed, but the current logic should work if date is correct
-      // filters.push(sql`EXTRACT(YEAR FROM ${transactions.date}) = ${params.year}`);
+      filters.push(sql`EXTRACT(YEAR FROM ${transactions.date}) = ${params.year}`);
     }
     if (params?.categoryId) {
       filters.push(eq(transactions.categoryId, params.categoryId));

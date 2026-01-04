@@ -28,8 +28,8 @@ import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Home() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: charts, isLoading: chartsLoading } = useDashboardCharts();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats({ year: 2024 });
+  const { data: charts, isLoading: chartsLoading } = useDashboardCharts({ year: 2024 });
 
   const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#f97316'];
 
