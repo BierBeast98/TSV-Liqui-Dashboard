@@ -92,17 +92,26 @@ export async function registerRoutes(
       });
 
       // Basic mapping - in a real app this would be configurable or smarter
-      // Expecting columns like "Date", "Amount", "Description" or similar
       const toImport = records.map((r: any) => {
-        // Try to find columns
-        const dateStr = r.Date || r.Datum || r.date;
-        const amountStr = r.Amount || r.Betrag || r.amount;
-        const descStr = r.Description || r.Verwendungszweck || r.description || r.Text;
+        // Log column names once to debug if needed
+        const keys = Object.keys(r);
+        
+        // German column mapping based on provided file
+        const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
+        const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
+        const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
         
         if (!dateStr || !amountStr) return null;
 
-        // Parse date (simple attempt)
-        const date = new Date(dateStr);
+        // Parse date (DD.MM.YYYY format)
+        let date: Date;
+        if (dateStr.includes('.')) {
+          const [day, month, year] = dateStr.split('.');
+          date = new Date(`${year}-${month}-${day}`);
+        } else {
+          date = new Date(dateStr);
+        }
+
         // Parse amount (handle German formats like "1.000,00" vs "1000.00")
         let amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
         if (isNaN(amount)) amount = parseFloat(amountStr);
