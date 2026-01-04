@@ -114,3 +114,18 @@ export const euerReports = pgTable("euer_reports", {
 export const insertEuerReportSchema = createInsertSchema(euerReports).omit({ id: true, uploadedAt: true });
 export type EuerReport = typeof euerReports.$inferSelect;
 export type InsertEuerReport = z.infer<typeof insertEuerReportSchema>;
+
+// EÜR Line Items - detailed breakdown per fiscal area
+export const euerLineItems = pgTable("euer_line_items", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").references(() => euerReports.id).notNull(),
+  fiscalArea: text("fiscal_area", { enum: ["ideell", "vermoegensverwaltung", "zweckbetrieb", "wirtschaftlich"] }).notNull(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  accountNumber: text("account_number"), // SKR Konto z.B. "2110"
+  description: text("description").notNull(),
+  amount: real("amount").notNull(),
+});
+
+export const insertEuerLineItemSchema = createInsertSchema(euerLineItems).omit({ id: true });
+export type EuerLineItem = typeof euerLineItems.$inferSelect;
+export type InsertEuerLineItem = z.infer<typeof insertEuerLineItemSchema>;

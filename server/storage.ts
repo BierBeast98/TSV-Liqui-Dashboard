@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts, euerReports,
+  categories, transactions, accounts, euerReports, euerLineItems,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
   type Account, type TransactionResponse,
-  type EuerReport, type InsertEuerReport
+  type EuerReport, type InsertEuerReport,
+  type EuerLineItem, type InsertEuerLineItem
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -56,6 +57,11 @@ export interface IStorage extends IAuthStorage {
   getEuerReports(): Promise<EuerReport[]>;
   upsertEuerReport(report: InsertEuerReport): Promise<EuerReport>;
   deleteEuerReport(year: number): Promise<void>;
+  
+  // EÜR Line Items
+  getEuerLineItems(reportId: number): Promise<EuerLineItem[]>;
+  getEuerLineItemsByArea(reportId: number, fiscalArea: string): Promise<EuerLineItem[]>;
+  upsertEuerLineItems(reportId: number, items: Omit<InsertEuerLineItem, 'reportId'>[]): Promise<EuerLineItem[]>;
 }
 
 export interface FiscalAreaSummary {
@@ -544,7 +550,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEuerReport(year: number): Promise<void> {
+    const report = await this.getEuerReport(year);
+    if (report) {
+      await db.delete(euerLineItems).where(eq(euerLineItems.reportId, report.id));
+    }
     await db.delete(euerReports).where(eq(euerReports.year, year));
+  }
+
+  // EÜR Line Items
+  async getEuerLineItems(reportId: number): Promise<EuerLineItem[]> {
+    return await db.select().from(euerLineItems).where(eq(euerLineItems.reportId, reportId));
+  }
+
+  async getEuerLineItemsByArea(reportId: number, fiscalArea: string): Promise<EuerLineItem[]> {
+    return await db.select().from(euerLineItems)
+      .where(and(eq(euerLineItems.reportId, reportId), eq(euerLineItems.fiscalArea, fiscalArea)));
+  }
+
+  async upsertEuerLineItems(reportId: number, items: Omit<InsertEuerLineItem, 'reportId'>[]): Promise<EuerLineItem[]> {
+    // Delete existing items for this report
+    await db.delete(euerLineItems).where(eq(euerLineItems.reportId, reportId));
+    
+    if (items.length === 0) return [];
+    
+    // Insert new items
+    const toInsert = items.map(item => ({ ...item, reportId }));
+    return await db.insert(euerLineItems).values(toInsert).returning();
   }
 }
 

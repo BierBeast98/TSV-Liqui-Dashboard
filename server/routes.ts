@@ -328,6 +328,32 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // EÜR Line Items
+  app.get("/api/euer-reports/:year/items", isAuthenticated, async (req, res) => {
+    const year = Number(req.params.year);
+    const fiscalArea = req.query.fiscalArea as string | undefined;
+    const report = await storage.getEuerReport(year);
+    if (!report) return res.json([]);
+    
+    if (fiscalArea) {
+      const items = await storage.getEuerLineItemsByArea(report.id, fiscalArea);
+      res.json(items);
+    } else {
+      const items = await storage.getEuerLineItems(report.id);
+      res.json(items);
+    }
+  });
+
+  app.put("/api/euer-reports/:year/items", isAuthenticated, async (req, res) => {
+    const year = Number(req.params.year);
+    const report = await storage.getEuerReport(year);
+    if (!report) return res.status(404).json({ message: "Report nicht gefunden" });
+    
+    const items = req.body.items || [];
+    const saved = await storage.upsertEuerLineItems(report.id, items);
+    res.json(saved);
+  });
+
   // EÜR endpoint - PDF-based with transaction fallback
   app.get("/api/report/euer", isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;
