@@ -329,6 +329,8 @@ export async function registerRoutes(
   });
 
   // EÜR Line Items
+  const validFiscalAreas = ['ideell', 'vermoegensverwaltung', 'zweckbetrieb', 'wirtschaftlich'];
+  
   app.get("/api/euer-reports/:year/items", isAuthenticated, async (req, res) => {
     const year = Number(req.params.year);
     const fiscalArea = req.query.fiscalArea as string | undefined;
@@ -336,6 +338,9 @@ export async function registerRoutes(
     if (!report) return res.json([]);
     
     if (fiscalArea) {
+      if (!validFiscalAreas.includes(fiscalArea)) {
+        return res.status(400).json({ message: "Ungültiger Tätigkeitsbereich" });
+      }
       const items = await storage.getEuerLineItemsByArea(report.id, fiscalArea);
       res.json(items);
     } else {

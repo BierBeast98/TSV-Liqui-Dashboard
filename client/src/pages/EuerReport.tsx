@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -52,9 +53,19 @@ interface EuerFormData {
   wirtschaftlichExpenses: number;
 }
 
+interface EuerLineItem {
+  id: number;
+  fiscalArea: string;
+  type: string;
+  accountNumber: string;
+  description: string;
+  amount: number;
+}
+
 export default function EuerReport() {
   const [year, setYear] = useState<number>(2024);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedArea, setSelectedArea] = useState<FiscalAreaSummary | null>(null);
   const { toast } = useToast();
 
   const { data: report, isLoading } = useQuery<FiscalAreaReport>({
@@ -64,6 +75,16 @@ export default function EuerReport() {
       if (!res.ok) throw new Error('Failed to fetch report');
       return res.json();
     }
+  });
+
+  const { data: lineItems, isLoading: isLoadingItems } = useQuery<EuerLineItem[]>({
+    queryKey: ['/api/euer-reports', year, 'items', selectedArea?.name],
+    queryFn: async () => {
+      const res = await fetch(`/api/euer-reports/${year}/items?fiscalArea=${selectedArea?.name}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!selectedArea
   });
 
   const [formData, setFormData] = useState<EuerFormData>({
@@ -404,10 +425,18 @@ export default function EuerReport() {
 
             <div className="grid gap-4 md:grid-cols-2">
               {report?.areas.map((area) => (
-                <Card key={area.name} data-testid={`card-area-${area.name}`}>
+                <Card 
+                  key={area.name} 
+                  className={`cursor-pointer transition-colors ${isPdfData ? 'hover-elevate' : ''}`}
+                  onClick={() => isPdfData && setSelectedArea(area)}
+                  data-testid={`card-area-${area.name}`}
+                >
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg flex items-center justify-between gap-2">
-                      <span>{area.label}</span>
+                      <span className="flex items-center gap-2">
+                        {area.label}
+                        {isPdfData && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                      </span>
                       <span className={`text-base font-semibold flex items-center gap-1 ${area.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {area.net >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                         {formatCurrency(area.net)}
@@ -429,6 +458,11 @@ export default function EuerReport() {
                         </div>
                       </div>
                     </div>
+                    {isPdfData && (
+                      <div className="mt-3 text-xs text-muted-foreground text-center">
+                        Klicken für Kontendetails
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -461,6 +495,94 @@ export default function EuerReport() {
             </Card>
           </>
         )}
+
+        <Dialog open={!!selectedArea} onOpenChange={(open) => !open && setSelectedArea(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{selectedArea?.label}</DialogTitle>
+              <DialogDescription>
+                Detaillierte Kontenaufstellung aus dem EÜR-Bericht
+              </DialogDescription>
+            </DialogHeader>
+            
+            {isLoadingItems ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : !lineItems || lineItems.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                Keine Detaildaten vorhanden
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
+                    Einnahmen
+                  </h4>
+                  <div className="space-y-1">
+                    {lineItems.filter(i => i.type === 'income').map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="flex justify-between items-center py-2 px-3 rounded-md bg-green-50 dark:bg-green-900/20"
+                        data-testid={`line-item-${item.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-mono text-muted-foreground w-12">
+                            {item.accountNumber}
+                          </span>
+                          <span className="text-sm">{item.description}</span>
+                        </div>
+                        <span className="font-medium text-green-700 dark:text-green-400">
+                          {formatCurrency(Number(item.amount))}
+                        </span>
+                      </div>
+                    ))}
+                    {lineItems.filter(i => i.type === 'income').length === 0 && (
+                      <div className="text-sm text-muted-foreground py-2">Keine Einnahmen</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4" />
+                    Ausgaben
+                  </h4>
+                  <div className="space-y-1">
+                    {lineItems.filter(i => i.type === 'expense').map((item) => (
+                      <div 
+                        key={item.id} 
+                        className="flex justify-between items-center py-2 px-3 rounded-md bg-red-50 dark:bg-red-900/20"
+                        data-testid={`line-item-${item.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-mono text-muted-foreground w-12">
+                            {item.accountNumber}
+                          </span>
+                          <span className="text-sm">{item.description}</span>
+                        </div>
+                        <span className="font-medium text-red-700 dark:text-red-400">
+                          {formatCurrency(Number(item.amount))}
+                        </span>
+                      </div>
+                    ))}
+                    {lineItems.filter(i => i.type === 'expense').length === 0 && (
+                      <div className="text-sm text-muted-foreground py-2">Keine Ausgaben</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t flex justify-between items-center">
+                  <span className="font-semibold">Ergebnis</span>
+                  <span className={`text-lg font-bold ${(selectedArea?.net || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {formatCurrency(selectedArea?.net || 0)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
