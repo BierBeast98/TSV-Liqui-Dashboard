@@ -53,8 +53,18 @@ export async function registerRoutes(
 
   // === Transactions ===
   app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
-    const query = api.transactions.list.input?.parse(req.query) || {};
-    const txs = await storage.getTransactions(query);
+    const query = req.query as any;
+    const params = {
+      year: query.year ? Number(query.year) : undefined,
+      categoryId: query.categoryId ? Number(query.categoryId) : undefined,
+      account: query.account,
+      search: query.search,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      minAmount: query.minAmount ? Number(query.minAmount) : undefined,
+      maxAmount: query.maxAmount ? Number(query.maxAmount) : undefined,
+    };
+    const txs = await storage.getTransactions(params);
     res.json(txs);
   });
 
@@ -115,6 +125,7 @@ export async function registerRoutes(
 
   app.post(api.transactions.upload.path, isAuthenticated, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send("No file uploaded");
+    const targetAccount = req.body.account || "Hauptkonto";
     
     try {
       const csvContent = req.file.buffer.toString('utf8');
@@ -131,7 +142,6 @@ export async function registerRoutes(
         const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
         const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
         const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
-        const accountName = r['Auftragskonto'] || r['Konto'] || r.Account || "Hauptkonto";
         
         if (!dateStr || !amountStr) return null;
 
@@ -150,7 +160,7 @@ export async function registerRoutes(
           date: date,
           amount: amount,
           description: descStr || "No description",
-          account: accountName,
+          account: targetAccount,
           hash: "",
           recurring: false
         };

@@ -47,6 +47,11 @@ export default function Transactions() {
   const [categoryId, setCategoryId] = useState<string>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [minAmount, setMinAmount] = useState<string>("");
+  const [maxAmount, setMaxAmount] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
@@ -55,8 +60,23 @@ export default function Transactions() {
     year, 
     categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
     account: accountFilter !== "all" ? accountFilter : undefined,
-    search: search || undefined
+    search: search || undefined,
+    minAmount: minAmount ? Number(minAmount) : undefined,
+    maxAmount: maxAmount ? Number(maxAmount) : undefined,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
   }) as { data: (any & { categoryName?: string, categoryType?: string })[], isLoading: boolean };
+
+  const resetFilters = () => {
+    setYear(2024);
+    setCategoryId("all");
+    setAccountFilter("all");
+    setSearch("");
+    setMinAmount("");
+    setMaxAmount("");
+    setStartDate("");
+    setEndDate("");
+  };
 
   // Sorting Logic
   const sortedTransactions = [...(transactions || [])].sort((a, b) => {
@@ -145,7 +165,7 @@ export default function Transactions() {
       const result = await uploadTx.mutateAsync(formData);
       toast({ 
         title: "Import Complete", 
-        description: `Imported ${result.imported} transactions. ${result.duplicates} duplicates skipped.` 
+        description: `Imported ${result.imported} transactions to ${formData.get('account')}. ${result.duplicates} duplicates skipped.` 
       });
       setIsUploadOpen(false);
     } catch (error: any) {
@@ -182,6 +202,19 @@ export default function Transactions() {
                 <DialogDescription>Upload a CSV file from your bank. We'll handle duplicate detection automatically.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleUpload} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Ziel-Konto</label>
+                  <Select name="account" defaultValue="Hauptkonto" required>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Wähle ein Konto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
+                      <SelectItem value="Sparkonto">Sparkonto</SelectItem>
+                      <SelectItem value="Handkasse">Handkasse</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid w-full items-center gap-1.5">
                   <Input 
                     type="file" 
@@ -223,54 +256,118 @@ export default function Transactions() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6 bg-card p-4 rounded-xl border border-border/60 shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search transactions..." 
-            className="pl-9 rounded-lg border-border/60 bg-background" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-2 w-full md:w-auto">
-          <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="w-[120px] rounded-lg">
-              <SelectValue placeholder="Year" />
-            </SelectTrigger>
-            <SelectContent>
-              {[2023, 2024, 2025].map(y => (
-                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col gap-4 mb-6 bg-card p-4 rounded-xl border border-border/60 shadow-sm">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search transactions..." 
+              className="pl-9 rounded-lg border-border/60 bg-background" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="w-[100px] rounded-lg">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {[2023, 2024, 2025].map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger className="w-[180px] rounded-lg">
-              <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories?.map((cat) => (
-                <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger className="w-[160px] rounded-lg">
+                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories?.map((cat) => (
+                  <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-[180px] rounded-lg">
-              <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Konto" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle Konten</SelectItem>
-              <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
-              <SelectItem value="Sparkonto">Sparkonto</SelectItem>
-              <SelectItem value="Handkasse">Handkasse</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger className="w-[160px] rounded-lg">
+                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Konto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Konten</SelectItem>
+                <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
+                <SelectItem value="Sparkonto">Sparkonto</SelectItem>
+                <SelectItem value="Handkasse">Handkasse</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="rounded-lg gap-2"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              <Filter className="w-4 h-4" />
+              {showAdvanced ? "Hide Advanced" : "Advanced"}
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="rounded-lg text-muted-foreground hover:text-foreground"
+              onClick={resetFilters}
+            >
+              Reset
+            </Button>
+          </div>
         </div>
+
+        {showAdvanced && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-border/60">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Min Amount (€)</label>
+              <Input 
+                type="number" 
+                placeholder="0.00" 
+                className="h-9 rounded-lg"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Max Amount (€)</label>
+              <Input 
+                type="number" 
+                placeholder="1000.00" 
+                className="h-9 rounded-lg"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Start Date</label>
+              <Input 
+                type="date" 
+                className="h-9 rounded-lg"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">End Date</label>
+              <Input 
+                type="date" 
+                className="h-9 rounded-lg"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Table */}

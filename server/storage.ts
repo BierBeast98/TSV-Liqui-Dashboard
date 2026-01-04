@@ -18,7 +18,16 @@ export interface IStorage extends IAuthStorage {
   seedCategories(): Promise<void>;
 
   // Transactions
-  getTransactions(params?: { year?: number; categoryId?: number; account?: string; search?: string }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]>;
+  getTransactions(params?: { 
+    year?: number; 
+    categoryId?: number; 
+    account?: string; 
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+  }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: UpdateTransactionRequest): Promise<Transaction>;
@@ -86,7 +95,16 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getTransactions(params?: { year?: number; categoryId?: number; account?: string; search?: string }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]> {
+  async getTransactions(params?: { 
+    year?: number; 
+    categoryId?: number; 
+    account?: string; 
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+  }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]> {
     let query = db.select({
       id: transactions.id,
       date: transactions.date,
@@ -116,6 +134,18 @@ export class DatabaseStorage implements IStorage {
     }
     if (params?.search) {
       filters.push(sql`${transactions.description} ILIKE ${`%${params.search}%`}`);
+    }
+    if (params?.startDate) {
+      filters.push(sql`${transactions.date} >= ${new Date(params.startDate)}`);
+    }
+    if (params?.endDate) {
+      filters.push(sql`${transactions.date} <= ${new Date(params.endDate)}`);
+    }
+    if (params?.minAmount !== undefined) {
+      filters.push(sql`ABS(${transactions.amount}) >= ${params.minAmount}`);
+    }
+    if (params?.maxAmount !== undefined) {
+      filters.push(sql`ABS(${transactions.amount}) <= ${params.maxAmount}`);
     }
     
     if (filters.length > 0) {

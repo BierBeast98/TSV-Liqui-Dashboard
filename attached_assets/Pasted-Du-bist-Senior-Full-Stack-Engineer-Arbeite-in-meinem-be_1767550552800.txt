@@ -1,0 +1,56 @@
+Du bist Senior Full-Stack Engineer. Arbeite in meinem bestehenden Repo (prüfe zuerst die vorhandene Tech-Stack/Framework-Entscheidung und folge konsequent dem bestehenden Stil). Implementiere die folgenden Änderungen basierend auf der aktuellen “Transactions”-Seite (siehe UI: Search, Year, Category, Konto-Filter, Buttons „Automatisch kategorisieren“, „Import CSV“, „Add Transaction“).
+
+ZIELE (Iteration):
+1) Transaction-Liste: Erweitere die Filter so, dass ich gezielt filtern kann nach:
+   - Konto (Dropdown, Mehrfachauswahl optional)
+   - Kategorie (Dropdown, Mehrfachauswahl optional)
+   - Amount (Betrag) Filter: von/bis (Range) + optional „genau Betrag“
+   - Datum Filter: von/bis (Date range) + optional „genau Datum“
+   - Description / Verwendungszweck: Volltextsuche (contains), case-insensitive
+   - Jahr (wie aktuell) soll weiterhin funktionieren, aber mit Datum-Range kombinierbar sein
+   - Kombinierte Filter müssen zusammen wirken (AND-Logik), und es muss einen “Reset filters”-Button geben.
+
+2) UI/UX wie im Screenshot:
+   - Behalte die Top-Filter-Leiste (Search + Year Dropdown + Category Dropdown + Konto Dropdown) bei.
+   - Ergänze zusätzliche Filter (Amount von/bis, Date von/bis) entweder:
+     a) als aufklappbaren “Advanced filters” Bereich (empfohlen), oder
+     b) als zusätzliche Inputs rechts in der Filterleiste, falls Platz vorhanden.
+   - „Auf Konto klicken“ bedeutet: Der Konto-Filter ist prominent (Dropdown) und schnell nutzbar.
+   - Filter sollen ohne Reload-Flackern reagieren (debounce für Search, z.B. 300–500ms, falls Frontend das unterstützt).
+
+3) BUGFIX: Konto-Zuordnung bei CSV-Import
+   Problem: Aktuell sind alle Umsätze einem Konto zugeordnet, obwohl die Daten aus zwei verschiedenen CSV-Dateien stammen und zu zwei verschiedenen Konten gehören.
+   Anforderungen:
+   - Stelle sicher, dass jede importierte Transaktion korrekt einem Konto zugeordnet wird.
+   - Beim CSV-Import muss klar sein, aus welchem Konto die CSV stammt:
+       Option A (MVP): Beim Import-Dialog muss ich ein Konto auswählen („Hauptkonto“, „Konto 2“, etc.). Alle aus dieser CSV importierten Transactions bekommen dieses account_id.
+       Option B (falls bereits im CSV vorhanden): Falls die CSV ein eindeutiges Konto-Feld (IBAN/Kontoname) enthält, mappe automatisch; sonst fallback auf Konto-Auswahl.
+   - Verhindere, dass Imports alle Transaktionen pauschal auf ein Default-Konto setzen.
+   - Prüfe und korrigiere ggf. DB-Schema/Importlogik. Falls Migration nötig ist, erstelle eine saubere Migration (oder Script) und dokumentiere kurz.
+
+4) Backend/DB:
+   - transactions sollen ein account_id (FK) besitzen (oder ein string „account“ je nach aktuellem Schema) und die UI soll das anzeigen.
+   - Accounts müssen in der DB existieren (accounts Tabelle), oder falls das Projekt anders modelliert ist, passe konsistent an.
+   - Die Filter müssen serverseitig korrekt angewendet werden (bei Backend-Query) ODER clientseitig auf einem geladenen Dataset – je nach bestehender Architektur. Bei großen Datenmengen: prefer serverseitig/paginieren.
+
+5) Qualität / Akzeptanzkriterien:
+   - Wenn ich Konto=„Hauptkonto“ filtere, sehe ich nur Transaktionen dieses Kontos.
+   - Wenn ich Category=„Spenden“ filtere, sehe ich nur diese Kategorie.
+   - Amount von 0 bis 100 zeigt nur Transaktionen in dem Bereich (inklusive Grenzen).
+   - Date von 2024-01-01 bis 2024-12-31 zeigt nur diese Zeitspanne.
+   - Search „TSV“ findet „Spende TSV Greding“.
+   - Kombinationen funktionieren (z.B. Konto=Hauptkonto AND Kategorie=Spenden AND Jahr=2024).
+   - CSV-Import: Wenn ich CSV A als „Hauptkonto“ importiere und CSV B als „Konto 2“, sind die resultierenden Transaktionen korrekt getrennt.
+
+VORGEHEN (wichtig):
+- Starte mit einer kurzen Analyse: Welche Dateien/Komponenten implementieren aktuell Transactions-Liste, Filterleiste und CSV Import?
+- Implementiere dann:
+  1) DB/Model Fix (account assignment)
+  2) CSV Import Anpassung (Kontoauswahl oder Auto-Mapping + Fallback)
+  3) Filter-UI + Filterlogik (inkl. Reset & Advanced Filters)
+- Schreibe kurze Notizen, wie ich es teste (manuell) und welche Dateien du geändert hast.
+
+LIEFERUNG:
+- Commit-fähige Änderungen im bestehenden Code
+- Keine großen Refactorings ohne Not
+- Behalte das Design wie im Screenshot (Spacing, Dropdowns, Button-Stil) so gut es im bestehenden Framework möglich ist.
