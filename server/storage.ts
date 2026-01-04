@@ -18,7 +18,7 @@ export interface IStorage extends IAuthStorage {
   seedCategories(): Promise<void>;
 
   // Transactions
-  getTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }): Promise<Transaction[]>;
+  getTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: UpdateTransactionRequest): Promise<Transaction>;
@@ -86,8 +86,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }): Promise<Transaction[]> {
-    let query = db.select().from(transactions);
+  async getTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }): Promise<(Transaction & { categoryName?: string; categoryType?: string })[]> {
+    let query = db.select({
+      id: transactions.id,
+      date: transactions.date,
+      amount: transactions.amount,
+      description: transactions.description,
+      categoryId: transactions.categoryId,
+      recurring: transactions.recurring,
+      hash: transactions.hash,
+      createdAt: transactions.createdAt,
+      categoryName: categories.name,
+      categoryType: categories.type
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(transactions.categoryId, categories.id));
+
     const filters = [];
 
     if (params?.year) {
@@ -104,7 +118,7 @@ export class DatabaseStorage implements IStorage {
       query.where(and(...filters));
     }
     
-    return await query.orderBy(desc(transactions.date));
+    return await query.orderBy(desc(transactions.date)) as (Transaction & { categoryName?: string; categoryType?: string })[];
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -233,23 +247,25 @@ export class DatabaseStorage implements IStorage {
     const mapping: Record<string, string[]> = {
       "Mitgliedsbeiträge": ["beitrag", "mitglied", "jahresbeitrag"],
       "Spenden": ["spende", "zuwendung", "stiftung"],
-      "Veranstaltungen": ["weihnachtsfeier", "fasching", "turnier", "hallencup", "veranstaltung"],
+      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier"],
+      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier", "fasching", "weihnachtsfeier"],
       "Sponsoring": ["sponsoring", "werbung"],
-      "Trainer & Personal": ["trainer", "lohn", "schiedsrichter", "uel-verguetung"],
+      "Trainer & Schiedsrichter": ["trainer", "lohn", "schiedsrichter", "uel-verguetung"],
       "Platz & Gebäude": ["strom", "wasser", "gas", "wärme", "heizung", "pacht", "grundsteuer", "reinigung"],
       "Bankgebühren": ["abschluss", "zinsen", "gebühr", "entgelt", "buchung", "karte"],
       "Versicherungen": ["versicherung", "arag", "vdek"],
       "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv"],
-      "Sportbetrieb": ["sportplatz", "trikot", "ball", "bedarf"],
       "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug"],
-      "Verwaltung & Büro": ["büro", "telefon", "internet", "porto", "brief"],
-      "Steuern": ["finanzamt", "ust", "steuer"],
     };
 
     for (const [catName, keywords] of Object.entries(mapping)) {
       if (keywords.some(k => desc.includes(k))) {
         const cat = cats.find(c => c.name === catName);
         if (cat) {
+          // If it's a category that exists for both income and expense, check amount
+          if (catName === "Veranstaltungen (Einnahmen)" && tx.amount < 0) continue;
+          if (catName === "Veranstaltungen (Ausgaben)" && tx.amount > 0) continue;
+          
           return await this.updateTransaction(transactionId, { categoryId: cat.id });
         }
       }

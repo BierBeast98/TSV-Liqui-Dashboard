@@ -51,7 +51,7 @@ export default function Transactions() {
     year, 
     categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
     search: search || undefined
-  });
+  }) as { data: (any & { categoryName?: string, categoryType?: string })[], isLoading: boolean };
   
   const { data: categories } = useCategories();
   const createTx = useCreateTransaction();

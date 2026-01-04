@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
+import { insertTransactionSchema, type InsertTransaction } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
@@ -103,8 +104,6 @@ export async function registerRoutes(
     if (!req.file) return res.status(400).send("No file uploaded");
     
     try {
-      // German bank CSVs often use Windows-1252 (ANSI) or UTF-8. 
-      // Semicolon is the standard delimiter in DE.
       const csvContent = req.file.buffer.toString('utf8');
       
       const records = parse(csvContent, {
@@ -112,22 +111,16 @@ export async function registerRoutes(
         skip_empty_lines: true,
         trim: true,
         delimiter: ';',
-        relax_column_count: true // Handle records with different column counts
+        relax_column_count: true
       });
 
-      // Basic mapping - in a real app this would be configurable or smarter
-      const toImport = records.map((r: any) => {
-        // Log column names once to debug if needed
-        const keys = Object.keys(r);
-        
-        // German column mapping based on provided file
+      const toImport: InsertTransaction[] = records.map((r: any) => {
         const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
         const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
         const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
         
         if (!dateStr || !amountStr) return null;
 
-        // Parse date (DD.MM.YYYY format)
         let date: Date;
         if (dateStr.includes('.')) {
           const [day, month, year] = dateStr.split('.');
@@ -136,7 +129,6 @@ export async function registerRoutes(
           date = new Date(dateStr);
         }
 
-        // Parse amount (handle German formats like "1.000,00" vs "1000.00")
         let amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
         if (isNaN(amount)) amount = parseFloat(amountStr);
 
@@ -144,7 +136,7 @@ export async function registerRoutes(
           date: date,
           amount: amount,
           description: descStr || "No description",
-          hash: "", // calculated in storage
+          hash: "",
           recurring: false
         };
       }).filter((r: any) => r !== null && !isNaN(r.amount));
