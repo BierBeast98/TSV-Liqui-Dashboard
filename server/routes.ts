@@ -167,9 +167,9 @@ export async function registerRoutes(
   // === Dashboard & Forecast ===
   app.get(api.dashboard.stats.path, isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;
-    const stats = await storage.getTotalStats(year);
-    // Current balance is total of ALL time
-    const history = await storage.getBalanceHistory(year);
+    const account = req.query.account as string | undefined;
+    const stats = await storage.getTotalStats(year, account);
+    const history = await storage.getBalanceHistory(year, account);
     const currentBalance = history.length > 0 ? history[history.length - 1].balance : 0;
     
     res.json({
@@ -182,9 +182,10 @@ export async function registerRoutes(
 
   app.get(api.dashboard.charts.path, isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;
-    const monthly = await storage.getMonthlyStats(year);
-    const cats = await storage.getCategoryStats(year);
-    const balance = await storage.getBalanceHistory(year);
+    const account = req.query.account as string | undefined;
+    const monthly = await storage.getMonthlyStats(year, account);
+    const cats = await storage.getCategoryStats(year, account);
+    const balance = await storage.getBalanceHistory(year, account);
 
     res.json({
       incomeVsExpenses: monthly,

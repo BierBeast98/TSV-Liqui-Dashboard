@@ -42,7 +42,6 @@ export function TransactionForm({ defaultValues, onSubmit, isSubmitting, onCance
       description: "",
       amount: 0,
       recurring: false,
-      date: new Date(),
       account: "Hauptkonto",
       ...defaultValues,
       // Ensure date is strictly a Date object if coming from string

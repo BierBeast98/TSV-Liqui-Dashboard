@@ -7,7 +7,8 @@ import {
   TrendingDown, 
   Wallet,
   Loader2,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Filter
 } from "lucide-react";
 import { 
   BarChart, 
@@ -26,10 +27,21 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Home() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats({ year: 2024 });
-  const { data: charts, isLoading: chartsLoading } = useDashboardCharts({ year: 2024 });
+  const [year, setYear] = useState<number>(2024);
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+  
+  const { data: stats, isLoading: statsLoading } = useDashboardStats({ 
+    year, 
+    account: accountFilter !== "all" ? accountFilter : undefined 
+  });
+  const { data: charts, isLoading: chartsLoading } = useDashboardCharts({ 
+    year, 
+    account: accountFilter !== "all" ? accountFilter : undefined 
+  });
 
   const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#f97316'];
 
@@ -46,9 +58,36 @@ export default function Home() {
   return (
     <Layout>
       <div className="space-y-8">
-        <div>
-          <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Dashboard Overview</h2>
-          <p className="text-muted-foreground mt-1">Welcome back. Here's your financial summary.</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Dashboard Overview</h2>
+            <p className="text-muted-foreground mt-1">Welcome back. Here's your financial summary.</p>
+          </div>
+          <div className="flex gap-2">
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="w-[120px] rounded-lg">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {[2023, 2024, 2025].map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger className="w-[180px] rounded-lg">
+                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Konto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Konten</SelectItem>
+                <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
+                <SelectItem value="Sparkonto">Sparkonto</SelectItem>
+                <SelectItem value="Handkasse">Handkasse</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Stats Grid */}

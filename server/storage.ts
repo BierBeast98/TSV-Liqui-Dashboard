@@ -26,10 +26,10 @@ export interface IStorage extends IAuthStorage {
   createTransactionsBulk(transactionsData: InsertTransaction[]): Promise<{ imported: number, duplicates: number }>;
   
   // Stats
-  getMonthlyStats(year: number): Promise<{ month: string, income: number, expenses: number }[]>;
-  getCategoryStats(year: number): Promise<{ name: string, value: number }[]>;
-  getBalanceHistory(year: number): Promise<{ date: string, balance: number }[]>;
-  getTotalStats(year: number): Promise<{ income: number, expenses: number }>;
+  getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]>;
+  getCategoryStats(year: number, account?: string): Promise<{ name: string, value: number }[]>;
+  getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]>;
+  getTotalStats(year: number, account?: string): Promise<{ income: number, expenses: number }>;
   autoCategorize(transactionId: number): Promise<Transaction | undefined>;
 }
 
@@ -169,8 +169,8 @@ export class DatabaseStorage implements IStorage {
     return { imported, duplicates };
   }
 
-  async getMonthlyStats(year: number): Promise<{ month: string, income: number, expenses: number }[]> {
-    const allTx = await this.getTransactions({ year });
+  async getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]> {
+    const allTx = await this.getTransactions({ year, account });
     const cats = await this.getCategories();
     const catTypeMap = new Map(cats.map(c => [c.id, c.type]));
 
@@ -196,8 +196,8 @@ export class DatabaseStorage implements IStorage {
     return Array.from(stats.entries()).map(([month, data]) => ({ month, ...data })).sort((a,b) => a.month.localeCompare(b.month));
   }
 
-  async getCategoryStats(year: number): Promise<{ name: string, value: number }[]> {
-    const allTx = await this.getTransactions({ year });
+  async getCategoryStats(year: number, account?: string): Promise<{ name: string, value: number }[]> {
+    const allTx = await this.getTransactions({ year, account });
     const cats = await this.getCategories();
     const catNameMap = new Map(cats.map(c => [c.id, c.name]));
     
@@ -215,8 +215,12 @@ export class DatabaseStorage implements IStorage {
     return Array.from(stats.entries()).map(([name, value]) => ({ name, value }));
   }
 
-  async getBalanceHistory(year: number): Promise<{ date: string, balance: number }[]> {
-    const allTx = await db.select().from(transactions).orderBy(asc(transactions.date));
+  async getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]> {
+    let query = db.select().from(transactions).orderBy(asc(transactions.date));
+    if (account && account !== "all") {
+      query.where(eq(transactions.account, account));
+    }
+    const allTx = await query;
     let balance = 0;
     const history: { date: string, balance: number }[] = [];
 
@@ -234,8 +238,8 @@ export class DatabaseStorage implements IStorage {
     return history;
   }
 
-  async getTotalStats(year: number): Promise<{ income: number, expenses: number }> {
-     const monthly = await this.getMonthlyStats(year);
+  async getTotalStats(year: number, account?: string): Promise<{ income: number, expenses: number }> {
+     const monthly = await this.getMonthlyStats(year, account);
      return monthly.reduce((acc, curr) => ({
          income: acc.income + curr.income,
          expenses: acc.expenses + curr.expenses

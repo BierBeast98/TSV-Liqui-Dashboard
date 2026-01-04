@@ -1,10 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 
-export function useDashboardStats(year?: number) {
-  const queryString = year ? `?year=${year}` : '';
+export function useDashboardStats(params?: { year?: number; account?: string }) {
+  const queryParams = new URLSearchParams();
+  if (params?.year) queryParams.append('year', params.year.toString());
+  if (params?.account && params.account !== 'all') queryParams.append('account', params.account);
+  
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+  
   return useQuery({
-    queryKey: [api.dashboard.stats.path, year],
+    queryKey: [api.dashboard.stats.path, params],
     queryFn: async () => {
       const res = await fetch(api.dashboard.stats.path + queryString, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch dashboard stats");
@@ -13,10 +18,15 @@ export function useDashboardStats(year?: number) {
   });
 }
 
-export function useDashboardCharts(year?: number) {
-  const queryString = year ? `?year=${year}` : '';
+export function useDashboardCharts(params?: { year?: number; account?: string }) {
+  const queryParams = new URLSearchParams();
+  if (params?.year) queryParams.append('year', params.year.toString());
+  if (params?.account && params.account !== 'all') queryParams.append('account', params.account);
+
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
   return useQuery({
-    queryKey: [api.dashboard.charts.path, year],
+    queryKey: [api.dashboard.charts.path, params],
     queryFn: async () => {
       const res = await fetch(api.dashboard.charts.path + queryString, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch dashboard charts");
