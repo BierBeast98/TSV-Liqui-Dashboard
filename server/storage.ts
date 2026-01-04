@@ -1,10 +1,11 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts,
+  categories, transactions, accounts, euerReports,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
-  type Account, type TransactionResponse
+  type Account, type TransactionResponse,
+  type EuerReport, type InsertEuerReport
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -49,6 +50,12 @@ export interface IStorage extends IAuthStorage {
   autoCategorize(transactionId: number): Promise<Transaction | undefined>;
   deleteAllTransactions(): Promise<void>;
   getFiscalAreaStats(year: number): Promise<FiscalAreaReport>;
+  
+  // EÜR Reports (PDF-based)
+  getEuerReport(year: number): Promise<EuerReport | undefined>;
+  getEuerReports(): Promise<EuerReport[]>;
+  upsertEuerReport(report: InsertEuerReport): Promise<EuerReport>;
+  deleteEuerReport(year: number): Promise<void>;
 }
 
 export interface FiscalAreaSummary {
@@ -511,6 +518,33 @@ export class DatabaseStorage implements IStorage {
       totalExpenses,
       totalNet: totalIncome - totalExpenses
     };
+  }
+
+  // EÜR Report methods (PDF-based)
+  async getEuerReport(year: number): Promise<EuerReport | undefined> {
+    const [report] = await db.select().from(euerReports).where(eq(euerReports.year, year));
+    return report;
+  }
+
+  async getEuerReports(): Promise<EuerReport[]> {
+    return await db.select().from(euerReports).orderBy(desc(euerReports.year));
+  }
+
+  async upsertEuerReport(report: InsertEuerReport): Promise<EuerReport> {
+    const existing = await this.getEuerReport(report.year);
+    if (existing) {
+      const [updated] = await db.update(euerReports)
+        .set(report)
+        .where(eq(euerReports.year, report.year))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(euerReports).values(report).returning();
+    return created;
+  }
+
+  async deleteEuerReport(year: number): Promise<void> {
+    await db.delete(euerReports).where(eq(euerReports.year, year));
   }
 }
 

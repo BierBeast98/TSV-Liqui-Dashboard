@@ -88,3 +88,29 @@ export interface ForecastData {
   balance: number;
   isProjected: boolean;
 }
+
+// === EÜR Reports (based on uploaded PDF, not transactions) ===
+
+export const euerReports = pgTable("euer_reports", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull().unique(),
+  sourceFileName: text("source_file_name"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  uploadedBy: text("uploaded_by"),
+  // A. Ideeller Tätigkeitsbereich
+  ideellIncome: real("ideell_income").default(0),
+  ideellExpenses: real("ideell_expenses").default(0),
+  // B. Vermögensverwaltung
+  vermoegenIncome: real("vermoegen_income").default(0),
+  vermoegenExpenses: real("vermoegen_expenses").default(0),
+  // C. Zweckbetriebe
+  zweckbetriebIncome: real("zweckbetrieb_income").default(0),
+  zweckbetriebExpenses: real("zweckbetrieb_expenses").default(0),
+  // D. Wirtschaftlicher Geschäftsbetrieb
+  wirtschaftlichIncome: real("wirtschaftlich_income").default(0),
+  wirtschaftlichExpenses: real("wirtschaftlich_expenses").default(0),
+});
+
+export const insertEuerReportSchema = createInsertSchema(euerReports).omit({ id: true, uploadedAt: true });
+export type EuerReport = typeof euerReports.$inferSelect;
+export type InsertEuerReport = z.infer<typeof insertEuerReportSchema>;
