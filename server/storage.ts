@@ -93,6 +93,7 @@ export class DatabaseStorage implements IStorage {
       amount: transactions.amount,
       description: transactions.description,
       categoryId: transactions.categoryId,
+      account: transactions.account,
       recurring: transactions.recurring,
       hash: transactions.hash,
       createdAt: transactions.createdAt,

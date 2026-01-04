@@ -14,13 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCategories } from "@/hooks/use-categories";
-import { insertTransactionSchema } from "@shared/routes";
+import { insertTransactionSchema } from "@shared/schema";
 import { Loader2 } from "lucide-react";
 
 const formSchema = insertTransactionSchema.extend({
   amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
   categoryId: z.coerce.number().optional(),
   date: z.coerce.date(),
+  account: z.string().min(1, "Account name is required"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -42,6 +43,7 @@ export function TransactionForm({ defaultValues, onSubmit, isSubmitting, onCance
       amount: 0,
       recurring: false,
       date: new Date(),
+      account: "Hauptkonto",
       ...defaultValues,
       // Ensure date is strictly a Date object if coming from string
       date: defaultValues?.date ? new Date(defaultValues.date) : new Date(),
@@ -99,6 +101,32 @@ export function TransactionForm({ defaultValues, onSubmit, isSubmitting, onCance
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="account"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Konto</FormLabel>
+              <Select 
+                onValueChange={field.onChange} 
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Wähle ein Konto" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
+                  <SelectItem value="Sparkonto">Sparkonto</SelectItem>
+                  <SelectItem value="Handkasse">Handkasse</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}

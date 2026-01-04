@@ -19,6 +19,7 @@ export const transactions = pgTable("transactions", {
   amount: real("amount").notNull(), // Using real for float amounts
   description: text("description").notNull(),
   categoryId: integer("category_id").references(() => categories.id),
+  account: text("account").default("Hauptkonto"), // New field for account distinction
   recurring: boolean("recurring").default(false),
   hash: text("hash").unique(), // For duplicate detection: hash(date + amount + description)
   createdAt: timestamp("created_at").defaultNow(),
