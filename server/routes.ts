@@ -79,10 +79,16 @@ export async function registerRoutes(
     if (!req.file) return res.status(400).send("No file uploaded");
     
     try {
-      const records = parse(req.file.buffer, {
+      // German bank CSVs often use Windows-1252 (ANSI) or UTF-8. 
+      // Semicolon is the standard delimiter in DE.
+      const csvContent = req.file.buffer.toString('utf8');
+      
+      const records = parse(csvContent, {
         columns: true,
         skip_empty_lines: true,
-        trim: true
+        trim: true,
+        delimiter: ';',
+        relax_column_count: true // Handle records with different column counts
       });
 
       // Basic mapping - in a real app this would be configurable or smarter
