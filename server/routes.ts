@@ -588,5 +588,62 @@ export async function registerRoutes(
     });
   });
 
+  // === Events / Veranstaltungen ===
+  app.get("/api/events", isAuthenticated, async (req, res) => {
+    const events = await storage.getEvents();
+    res.json(events);
+  });
+
+  app.get("/api/events/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    const event = await storage.getEvent(id);
+    if (!event) {
+      return res.status(404).json({ message: "Veranstaltung nicht gefunden" });
+    }
+    res.json(event);
+  });
+
+  app.post("/api/events", isAuthenticated, async (req, res) => {
+    const event = await storage.createEvent(req.body);
+    res.status(201).json(event);
+  });
+
+  app.patch("/api/events/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    const event = await storage.updateEvent(id, req.body);
+    res.json(event);
+  });
+
+  app.delete("/api/events/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.deleteEvent(id);
+    res.status(204).send();
+  });
+
+  // Event Entries
+  app.get("/api/events/:eventId/entries", isAuthenticated, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const entries = await storage.getEventEntries(eventId);
+    res.json(entries);
+  });
+
+  app.post("/api/events/:eventId/entries", isAuthenticated, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const entry = await storage.createEventEntry({ ...req.body, eventId });
+    res.status(201).json(entry);
+  });
+
+  app.patch("/api/event-entries/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    const entry = await storage.updateEventEntry(id, req.body);
+    res.json(entry);
+  });
+
+  app.delete("/api/event-entries/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.deleteEventEntry(id);
+    res.status(204).send();
+  });
+
   return httpServer;
 }
