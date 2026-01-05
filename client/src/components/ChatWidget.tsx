@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageCircle, X, Send, Loader2, Bot, User } from "lucide-react";
 
@@ -20,12 +19,12 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -52,6 +51,7 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
 
       const decoder = new TextDecoder();
       let assistantContent = "";
+      let hasError = false;
 
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -66,6 +66,22 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (data.done) {
+                break;
+              }
+              if (data.error) {
+                hasError = true;
+                assistantContent = data.error;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantContent,
+                  };
+                  return updated;
+                });
+                break;
+              }
               if (data.content) {
                 assistantContent += data.content;
                 setMessages((prev) => {
@@ -80,7 +96,10 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
             } catch {}
           }
         }
+        if (hasError) break;
       }
+      
+      reader.releaseLock();
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -138,7 +157,7 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
             </Button>
           </div>
 
-          <ScrollArea className="flex-1 p-3" ref={scrollRef}>
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3">
             {messages.length === 0 ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
@@ -195,7 +214,7 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           <div className="p-3 border-t">
             <div className="flex gap-2">

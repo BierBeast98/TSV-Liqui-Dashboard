@@ -665,6 +665,12 @@ export async function registerRoutes(
 
   // === AI Assistant ===
   app.post("/api/assistant", isAuthenticated, async (req, res) => {
+    let aborted = false;
+    
+    req.on("close", () => {
+      aborted = true;
+    });
+    
     try {
       const { message, year, account } = req.body;
       
@@ -675,6 +681,7 @@ export async function registerRoutes(
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
       
       const stream = await processAssistantQuery({
         message,
@@ -683,15 +690,20 @@ export async function registerRoutes(
       });
       
       for await (const chunk of stream) {
+        if (aborted) break;
         res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
       }
       
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      if (!aborted) {
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      }
       res.end();
     } catch (error) {
       console.error("Assistant error:", error);
       if (res.headersSent) {
-        res.write(`data: ${JSON.stringify({ error: "Ein Fehler ist aufgetreten" })}\n\n`);
+        if (!aborted) {
+          res.write(`data: ${JSON.stringify({ error: "Ein Fehler ist aufgetreten" })}\n\n`);
+        }
         res.end();
       } else {
         res.status(500).json({ error: "Ein Fehler ist aufgetreten" });
