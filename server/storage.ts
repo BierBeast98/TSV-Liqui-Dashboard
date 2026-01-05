@@ -415,31 +415,50 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBalanceHistory(year: number, account?: string): Promise<{ date: string, balance: number }[]> {
-    let query = db.select().from(transactions).orderBy(asc(transactions.date));
+    // Get opening balance for the year
+    let openingBalance = 0;
+    let accountIdFilter: number | undefined;
     
     if (account && account !== "all") {
-      // Check if it's a numeric ID (new accountId) or a string (legacy account name)
-      if (!isNaN(Number(account))) {
-        query.where(eq(transactions.accountId, Number(account)));
-      } else {
-        query.where(eq(transactions.account, account));
+      const accounts = await this.getAccounts();
+      const matchedAccount = accounts.find(a => a.name === account || a.iban === account);
+      if (matchedAccount) {
+        accountIdFilter = matchedAccount.id;
       }
     }
-    const allTx = await query;
-    let balance = 0;
+    
+    const balances = await this.getAccountBalances(year, accountIdFilter);
+    if (balances.length > 0) {
+      openingBalance = balances.reduce((sum, b) => sum + (b.openingBalance || 0), 0);
+    }
+    
+    // Get transactions
+    const allTx = await this.getTransactions({ account });
+    
+    // Sort by date
+    const sortedTx = [...allTx].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Start with opening balance
+    let balance = openingBalance;
     const history: { date: string, balance: number }[] = [];
+    
+    // Add starting point at year beginning
+    history.push({ date: `${year}-01-01`, balance: openingBalance });
 
-    for (const tx of allTx) {
-        balance += tx.amount;
+    for (const tx of sortedTx) {
         const dateObj = new Date(tx.date);
         if (isNaN(dateObj.getTime())) continue;
+        
+        // Only include transactions from the selected year
+        if (dateObj.getFullYear() !== year) continue;
+        
+        balance += tx.amount;
         const dateStr = dateObj.toISOString().split('T')[0];
-        if (dateObj.getFullYear() === year) {
-           if (history.length > 0 && history[history.length-1].date === dateStr) {
-               history[history.length-1].balance = balance;
-           } else {
-               history.push({ date: dateStr, balance });
-           }
+        
+        if (history.length > 0 && history[history.length-1].date === dateStr) {
+            history[history.length-1].balance = balance;
+        } else {
+            history.push({ date: dateStr, balance });
         }
     }
     return history;
