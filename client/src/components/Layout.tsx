@@ -8,7 +8,8 @@ import {
   LogOut, 
   User,
   Menu,
-  FileText
+  FileText,
+  Settings
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/categories", icon: Tags, label: "Kategorien" },
     { href: "/euer", icon: FileText, label: "EÜR Bericht" },
     { href: "/forecast", icon: TrendingUp, label: "Prognose" },
+    { href: "/settings", icon: Settings, label: "Einstellungen" },
   ];
 
   const NavContent = () => (

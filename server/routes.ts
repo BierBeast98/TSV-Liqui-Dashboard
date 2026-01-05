@@ -291,9 +291,19 @@ export async function registerRoutes(
     
     // Get opening balance from account_balances table
     let openingBalance = 0;
-    const balances = await storage.getAccountBalances(year);
+    
+    // If filtering by account name, find the accountId first
+    let accountIdFilter: number | undefined;
+    if (account && account !== "all") {
+      const accounts = await storage.getAccounts();
+      const matchedAccount = accounts.find(a => a.name === account || a.iban === account);
+      if (matchedAccount) {
+        accountIdFilter = matchedAccount.id;
+      }
+    }
+    
+    const balances = await storage.getAccountBalances(year, accountIdFilter);
     if (balances.length > 0) {
-      // Sum all account opening balances (or filter by account if specified)
       openingBalance = balances.reduce((sum, b) => sum + (b.openingBalance || 0), 0);
     }
     

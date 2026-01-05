@@ -27,7 +27,7 @@ export interface IStorage extends IAuthStorage {
   getOrCreateAccount(iban: string, name?: string): Promise<Account>;
 
   // Account Balances (Opening balances per year)
-  getAccountBalances(year: number): Promise<(AccountBalance & { accountName: string; iban: string })[]>;
+  getAccountBalances(year: number, accountId?: number): Promise<(AccountBalance & { accountName: string; iban: string })[]>;
   getAccountBalance(accountId: number, year: number): Promise<AccountBalance | undefined>;
   upsertAccountBalance(balance: InsertAccountBalance): Promise<AccountBalance>;
 
@@ -200,7 +200,12 @@ export class DatabaseStorage implements IStorage {
     return newAccount;
   }
 
-  async getAccountBalances(year: number): Promise<(AccountBalance & { accountName: string; iban: string })[]> {
+  async getAccountBalances(year: number, accountId?: number): Promise<(AccountBalance & { accountName: string; iban: string })[]> {
+    const filters = [eq(accountBalances.year, year)];
+    if (accountId) {
+      filters.push(eq(accountBalances.accountId, accountId));
+    }
+    
     const result = await db.select({
       id: accountBalances.id,
       accountId: accountBalances.accountId,
@@ -211,7 +216,7 @@ export class DatabaseStorage implements IStorage {
     })
     .from(accountBalances)
     .innerJoin(accounts, eq(accountBalances.accountId, accounts.id))
-    .where(eq(accountBalances.year, year));
+    .where(and(...filters));
     return result;
   }
 
