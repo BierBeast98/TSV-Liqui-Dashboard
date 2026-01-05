@@ -366,6 +366,8 @@ export class DatabaseStorage implements IStorage {
 
   async getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]> {
     const allTx = await this.getTransactions({ year, account });
+    const cats = await this.getCategories();
+    const transferCatIds = new Set(cats.filter(c => c.name === 'Interne Umbuchung').map(c => c.id));
 
     const stats = new Map<string, { income: number, expenses: number }>();
     
@@ -379,6 +381,9 @@ export class DatabaseStorage implements IStorage {
         if (isNaN(dateObj.getTime())) continue;
         const month = dateObj.toISOString().slice(0, 7);
         if (!stats.has(month)) continue;
+        
+        // Skip internal transfers from income/expense calculation
+        if (tx.categoryId && transferCatIds.has(tx.categoryId)) continue;
         
         if (tx.amount > 0) {
             stats.get(month)!.income += tx.amount;
@@ -454,6 +459,21 @@ export class DatabaseStorage implements IStorage {
 
     const cats = await this.getCategories();
     const desc = tx.description.toLowerCase();
+    
+    // Check for internal transfers between own accounts
+    const accounts = await this.getAccounts();
+    const ownIbans = accounts.map(a => a.iban.toUpperCase());
+    const descUpper = tx.description.toUpperCase();
+    
+    // Check if description contains one of our own IBANs (indicates transfer between own accounts)
+    const isInternalTransfer = ownIbans.some(iban => descUpper.includes(iban));
+    
+    if (isInternalTransfer) {
+      const transferCat = cats.find(c => c.name === 'Interne Umbuchung');
+      if (transferCat) {
+        return await this.updateTransaction(transactionId, { categoryId: transferCat.id });
+      }
+    }
 
     const mapping: Record<string, string[]> = {
       // A. Ideeller Bereich
