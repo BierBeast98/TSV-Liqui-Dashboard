@@ -26,15 +26,19 @@ async function getTransactionContext(year: number, account?: string): Promise<st
   const categories = await storage.getCategories();
   const balances = await storage.getAccountBalances(year);
   const totalStats = await storage.getTotalStats(year, account);
+  const monthlyStats = await storage.getMonthlyStats(year, account);
   
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
   const accountMap = new Map(allAccounts.map(a => [a.id, a.name]));
+  
+  const transferCatId = categories.find(c => c.name === 'Interne Umbuchung')?.id;
+  const filteredTransactions = transactions.filter(tx => tx.categoryId !== transferCatId);
   
   const openingBalance = balances.reduce((sum, b) => sum + (b.openingBalance || 0), 0);
   const cashFlow = totalStats.income - totalStats.expenses;
   const cashPosition = openingBalance + cashFlow;
   
-  const txSummaries = transactions.slice(0, 200).map(tx => ({
+  const txSummaries = filteredTransactions.slice(0, 200).map(tx => ({
     date: new Date(tx.date).toLocaleDateString('de-DE'),
     amount: tx.amount,
     description: tx.description.substring(0, 100),
@@ -44,6 +48,7 @@ async function getTransactionContext(year: number, account?: string): Promise<st
   
   return `
 FINANZDATEN für ${year}:
+(HINWEIS: Interne Umbuchungen sind bereits aus allen Statistiken ausgeschlossen!)
 
 KONTEN:
 ${allAccounts.map(a => `- ${a.name} (IBAN: ${a.iban})`).join('\n')}
@@ -54,14 +59,19 @@ ${balances.map(b => {
   return `- ${accName}: ${b.openingBalance?.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}`;
 }).join('\n')}
 
-STATISTIKEN:
+JAHRESSTATISTIKEN (ohne interne Umbuchungen):
 - Anfangssaldo gesamt: ${openingBalance.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
 - Kassenbestand aktuell: ${cashPosition.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
 - Einnahmen gesamt: ${totalStats.income.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
 - Ausgaben gesamt: ${totalStats.expenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
 - Cashflow: ${cashFlow.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
 
-TRANSAKTIONEN (${transactions.length} insgesamt, erste 200):
+MONATLICHE STATISTIKEN (ohne interne Umbuchungen):
+${monthlyStats.map(m => 
+  `${m.month}: Einnahmen ${m.income.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} | Ausgaben ${m.expenses.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}`
+).join('\n')}
+
+TRANSAKTIONEN (${filteredTransactions.length} ohne Umbuchungen, erste 200):
 ${txSummaries.map(tx => 
   `${tx.date}: ${tx.amount >= 0 ? '+' : ''}${tx.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })} | ${tx.category} | ${tx.description}`
 ).join('\n')}
@@ -129,8 +139,13 @@ export async function processAssistantQuery(request: AssistantRequest): Promise<
   
   const systemPrompt = `Du bist ein Finanz-Assistent für den Sportverein TSV Greding e.V. 
 Du analysierst Finanzdaten und beantwortest Fragen auf Deutsch.
-Benutze die bereitgestellten Transaktionsdaten, um präzise Antworten zu geben.
-Formatiere Geldbeträge immer im deutschen Format (z.B. 1.234,56 €).
+
+WICHTIG: 
+- Benutze NUR die bereitgestellten MONATLICHEN STATISTIKEN und JAHRESSTATISTIKEN für Einnahmen/Ausgaben-Fragen.
+- Interne Umbuchungen zwischen Vereinskonten sind bereits aus allen Statistiken ausgeschlossen.
+- Berechne KEINE eigenen Summen aus den Transaktionslisten - verwende die vorberechneten Statistiken.
+
+Formatiere Geldbeträge immer im deutschen Format (z.B. 1.234,56 EUR).
 Wenn du nach Gründen für Kontostandsänderungen gefragt wirst, nenne die konkreten Transaktionen.
 Sei präzise und hilfsbereit. Antworte auf Deutsch.
 
