@@ -76,8 +76,22 @@ export default function Home() {
     account: accountFilter !== "all" ? accountFilter : undefined 
   });
 
+  const buildTransactionsUrl = () => {
+    const params = new URLSearchParams();
+    params.set("year", String(year));
+    if (accountFilter !== "all") {
+      params.set("account", accountFilter);
+    }
+    return `/api/transactions?${params.toString()}`;
+  };
+  
   const { data: drillDownTransactions, isLoading: drillDownLoading } = useQuery<TransactionWithDetails[]>({
-    queryKey: ["/api/transactions", { year, account: accountFilter !== "all" ? accountFilter : undefined }],
+    queryKey: ["/api/transactions", year, accountFilter],
+    queryFn: async () => {
+      const res = await fetch(buildTransactionsUrl(), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
     enabled: !!drillDown,
   });
 
