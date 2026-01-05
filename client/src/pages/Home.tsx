@@ -436,7 +436,7 @@ export default function Home() {
                         {tx.description}
                       </p>
                     </div>
-                    <div className={`text-sm font-semibold whitespace-nowrap ${tx.amount > 0 ? 'text-primary' : 'text-destructive'}`}>
+                    <div className={`text-sm font-semibold whitespace-nowrap ${tx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
                       {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
                     </div>
                   </div>

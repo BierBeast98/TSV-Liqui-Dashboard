@@ -490,8 +490,8 @@ export default function Transactions() {
                       <span className="text-muted-foreground italic text-xs">Uncategorized</span>
                     )}
                   </TableCell>
-                  <TableCell className={`text-right font-bold ${tx.categoryType === 'income' ? 'text-emerald-600' : 'text-foreground'}`}>
-                    {tx.categoryType === 'income' ? '+' : ''}{formatCurrency(tx.amount)}
+                  <TableCell className={`text-right font-bold ${tx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                    {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
