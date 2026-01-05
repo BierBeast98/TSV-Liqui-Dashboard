@@ -142,3 +142,43 @@ export const euerLineItems = pgTable("euer_line_items", {
 export const insertEuerLineItemSchema = createInsertSchema(euerLineItems).omit({ id: true });
 export type EuerLineItem = typeof euerLineItems.$inferSelect;
 export type InsertEuerLineItem = z.infer<typeof insertEuerLineItemSchema>;
+
+// === Events / Veranstaltungen (for tracking income/expenses at festivals, etc.) ===
+
+export const events = pgTable("events", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  date: timestamp("date").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const eventEntries = pgTable("event_entries", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").references(() => events.id).notNull(),
+  date: timestamp("date").notNull(),
+  receiptNumber: text("receipt_number"), // Belegnummer
+  bankTransaction: text("bank_transaction"), // Bankbuchung (e.g., Sparkasse)
+  description: text("description").notNull(), // Grund
+  income: real("income").default(0), // Einnahmen
+  expense: real("expense").default(0), // Ausgaben
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertEventSchema = createInsertSchema(events, {
+  date: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
+export const insertEventEntrySchema = createInsertSchema(eventEntries, {
+  date: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
+
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type EventEntry = typeof eventEntries.$inferSelect;
+export type InsertEventEntry = z.infer<typeof insertEventEntrySchema>;
+
+export interface EventWithTotals extends Event {
+  totalIncome: number;
+  totalExpenses: number;
+  result: number;
+}

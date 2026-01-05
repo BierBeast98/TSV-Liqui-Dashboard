@@ -1,13 +1,15 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts, accountBalances, euerReports, euerLineItems,
+  categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
   type Account, type TransactionResponse,
   type AccountBalance, type InsertAccountBalance,
   type EuerReport, type InsertEuerReport,
-  type EuerLineItem, type InsertEuerLineItem
+  type EuerLineItem, type InsertEuerLineItem,
+  type Event, type InsertEvent, type EventWithTotals,
+  type EventEntry, type InsertEventEntry
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -68,6 +70,19 @@ export interface IStorage extends IAuthStorage {
   getEuerLineItems(reportId: number): Promise<EuerLineItem[]>;
   getEuerLineItemsByArea(reportId: number, fiscalArea: string): Promise<EuerLineItem[]>;
   upsertEuerLineItems(reportId: number, items: Omit<InsertEuerLineItem, 'reportId'>[]): Promise<EuerLineItem[]>;
+  
+  // Events / Veranstaltungen
+  getEvents(): Promise<EventWithTotals[]>;
+  getEvent(id: number): Promise<Event | undefined>;
+  createEvent(event: InsertEvent): Promise<Event>;
+  updateEvent(id: number, updates: Partial<InsertEvent>): Promise<Event>;
+  deleteEvent(id: number): Promise<void>;
+  
+  // Event Entries
+  getEventEntries(eventId: number): Promise<EventEntry[]>;
+  createEventEntry(entry: InsertEventEntry): Promise<EventEntry>;
+  updateEventEntry(id: number, updates: Partial<InsertEventEntry>): Promise<EventEntry>;
+  deleteEventEntry(id: number): Promise<void>;
 }
 
 export interface FiscalAreaSummary {
@@ -615,6 +630,66 @@ export class DatabaseStorage implements IStorage {
     // Insert new items
     const toInsert = items.map(item => ({ ...item, reportId }));
     return await db.insert(euerLineItems).values(toInsert).returning();
+  }
+
+  // Events / Veranstaltungen
+  async getEvents(): Promise<EventWithTotals[]> {
+    const allEvents = await db.select().from(events).orderBy(desc(events.date));
+    const result: EventWithTotals[] = [];
+    
+    for (const event of allEvents) {
+      const entries = await db.select().from(eventEntries).where(eq(eventEntries.eventId, event.id));
+      const totalIncome = entries.reduce((sum, e) => sum + (e.income || 0), 0);
+      const totalExpenses = entries.reduce((sum, e) => sum + (e.expense || 0), 0);
+      result.push({
+        ...event,
+        totalIncome,
+        totalExpenses,
+        result: totalIncome - totalExpenses
+      });
+    }
+    return result;
+  }
+
+  async getEvent(id: number): Promise<Event | undefined> {
+    const [event] = await db.select().from(events).where(eq(events.id, id));
+    return event;
+  }
+
+  async createEvent(event: InsertEvent): Promise<Event> {
+    const [created] = await db.insert(events).values(event).returning();
+    return created;
+  }
+
+  async updateEvent(id: number, updates: Partial<InsertEvent>): Promise<Event> {
+    const [updated] = await db.update(events).set(updates).where(eq(events.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEvent(id: number): Promise<void> {
+    await db.delete(eventEntries).where(eq(eventEntries.eventId, id));
+    await db.delete(events).where(eq(events.id, id));
+  }
+
+  // Event Entries
+  async getEventEntries(eventId: number): Promise<EventEntry[]> {
+    return await db.select().from(eventEntries)
+      .where(eq(eventEntries.eventId, eventId))
+      .orderBy(asc(eventEntries.date));
+  }
+
+  async createEventEntry(entry: InsertEventEntry): Promise<EventEntry> {
+    const [created] = await db.insert(eventEntries).values(entry).returning();
+    return created;
+  }
+
+  async updateEventEntry(id: number, updates: Partial<InsertEventEntry>): Promise<EventEntry> {
+    const [updated] = await db.update(eventEntries).set(updates).where(eq(eventEntries.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEventEntry(id: number): Promise<void> {
+    await db.delete(eventEntries).where(eq(eventEntries.id, id));
   }
 }
 
