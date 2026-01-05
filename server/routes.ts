@@ -604,13 +604,21 @@ export async function registerRoutes(
   });
 
   app.post("/api/events", isAuthenticated, async (req, res) => {
-    const event = await storage.createEvent(req.body);
+    const eventData = {
+      ...req.body,
+      date: new Date(req.body.date),
+    };
+    const event = await storage.createEvent(eventData);
     res.status(201).json(event);
   });
 
   app.patch("/api/events/:id", isAuthenticated, async (req, res) => {
     const id = Number(req.params.id);
-    const event = await storage.updateEvent(id, req.body);
+    const updates = { ...req.body };
+    if (updates.date) {
+      updates.date = new Date(updates.date);
+    }
+    const event = await storage.updateEvent(id, updates);
     res.json(event);
   });
 
@@ -629,13 +637,22 @@ export async function registerRoutes(
 
   app.post("/api/events/:eventId/entries", isAuthenticated, async (req, res) => {
     const eventId = Number(req.params.eventId);
-    const entry = await storage.createEventEntry({ ...req.body, eventId });
+    const entryData = {
+      ...req.body,
+      eventId,
+      date: new Date(req.body.date),
+    };
+    const entry = await storage.createEventEntry(entryData);
     res.status(201).json(entry);
   });
 
   app.patch("/api/event-entries/:id", isAuthenticated, async (req, res) => {
     const id = Number(req.params.id);
-    const entry = await storage.updateEventEntry(id, req.body);
+    const updates = { ...req.body };
+    if (updates.date) {
+      updates.date = new Date(updates.date);
+    }
+    const entry = await storage.updateEventEntry(id, updates);
     res.json(entry);
   });
 
