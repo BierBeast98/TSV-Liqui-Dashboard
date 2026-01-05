@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import tsvLogo from "@assets/IMG_0388_1767626953776.jpeg";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -34,11 +35,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-          TSV Finance
-        </h1>
-        <p className="text-xs text-muted-foreground mt-1 font-medium tracking-wide uppercase">Financial Dashboard</p>
+      <div className="p-6 flex items-center gap-3">
+        <img src={tsvLogo} alt="TSV Greding Logo" className="w-14 h-14 object-contain" />
+        <div>
+          <h1 className="text-xl font-bold font-display text-primary">
+            TSV Greding
+          </h1>
+          <p className="text-xs text-muted-foreground font-medium tracking-wide">Finanzverwaltung</p>
+        </div>
       </div>
       
       <nav className="flex-1 px-4 space-y-2">
@@ -97,7 +101,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 border-b border-border bg-card/80 backdrop-blur-md z-40 flex items-center justify-between px-4">
-        <h1 className="text-xl font-bold font-display text-primary">TSV Finance</h1>
+        <div className="flex items-center gap-2">
+          <img src={tsvLogo} alt="TSV Greding" className="w-8 h-8 object-contain" />
+          <span className="text-lg font-bold font-display text-primary">TSV Greding</span>
+        </div>
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon">

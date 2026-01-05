@@ -8,66 +8,66 @@
   --font-display: 'Outfit', sans-serif;
   --font-body: 'Plus Jakarta Sans', sans-serif;
 
-  /* Refined Blue/Slate Palette */
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  /* TSV Greding Green & Gold Theme */
+  --background: 120 15% 97%;
+  --foreground: 150 30% 10%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
+  --card-foreground: 150 30% 10%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
+  --popover-foreground: 150 30% 10%;
 
-  --primary: 221 83% 53%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 122 39% 34%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222 47% 11.2%;
+  --secondary: 120 15% 94%;
+  --secondary-foreground: 150 30% 15%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 120 10% 94%;
+  --muted-foreground: 120 5% 45%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222 47% 11.2%;
+  --accent: 45 100% 50%;
+  --accent-foreground: 150 30% 10%;
 
   --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 221.2 83.2% 53.3%;
+  --border: 120 10% 88%;
+  --input: 120 10% 88%;
+  --ring: 122 39% 34%;
 
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  --background: 150 30% 6%;
+  --foreground: 120 15% 95%;
 
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
+  --card: 150 25% 8%;
+  --card-foreground: 120 15% 95%;
 
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 150 25% 8%;
+  --popover-foreground: 120 15% 95%;
 
-  --primary: 217.2 91.2% 59.8%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  --primary: 122 45% 45%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 150 20% 15%;
+  --secondary-foreground: 120 15% 95%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 150 20% 15%;
+  --muted-foreground: 120 10% 60%;
 
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 45 100% 50%;
+  --accent-foreground: 150 30% 10%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 40%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+  --border: 150 20% 18%;
+  --input: 150 20% 18%;
+  --ring: 122 45% 45%;
 }
 
 @layer base {
