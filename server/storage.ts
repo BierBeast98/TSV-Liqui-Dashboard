@@ -308,8 +308,6 @@ export class DatabaseStorage implements IStorage {
 
   async getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]> {
     const allTx = await this.getTransactions({ year, account });
-    const cats = await this.getCategories();
-    const catTypeMap = new Map(cats.map(c => [c.id, c.type]));
 
     const stats = new Map<string, { income: number, expenses: number }>();
     
@@ -324,11 +322,9 @@ export class DatabaseStorage implements IStorage {
         const month = dateObj.toISOString().slice(0, 7);
         if (!stats.has(month)) continue;
         
-        const categoryId = tx.categoryId;
-        const type = categoryId ? catTypeMap.get(categoryId) : null;
-        if (type === 'income' || (!type && tx.amount > 0)) {
+        if (tx.amount > 0) {
             stats.get(month)!.income += tx.amount;
-        } else if (type === 'expense' || (!type && tx.amount < 0)) {
+        } else {
             stats.get(month)!.expenses += Math.abs(tx.amount);
         }
     }
@@ -562,7 +558,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(euerLineItems).where(eq(euerLineItems.reportId, reportId));
   }
 
-  async getEuerLineItemsByArea(reportId: number, fiscalArea: string): Promise<EuerLineItem[]> {
+  async getEuerLineItemsByArea(reportId: number, fiscalArea: "ideell" | "vermoegensverwaltung" | "zweckbetrieb" | "wirtschaftlich"): Promise<EuerLineItem[]> {
     return await db.select().from(euerLineItems)
       .where(and(eq(euerLineItems.reportId, reportId), eq(euerLineItems.fiscalArea, fiscalArea)));
   }
