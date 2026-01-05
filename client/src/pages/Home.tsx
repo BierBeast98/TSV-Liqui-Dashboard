@@ -60,8 +60,8 @@ export default function Home() {
       <div className="space-y-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Dashboard Overview</h2>
-            <p className="text-muted-foreground mt-1">Welcome back. Here's your financial summary.</p>
+            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Finanzübersicht</h2>
+            <p className="text-muted-foreground mt-1">Willkommen zurück. Hier ist die Zusammenfassung.</p>
           </div>
           <div className="flex gap-2">
             <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
@@ -91,37 +91,41 @@ export default function Home() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <StatCard
-            title="Current Balance"
-            value={formatCurrency(stats?.currentBalance || 0)}
+            title="Anfangssaldo"
+            value={formatCurrency(stats?.openingBalance || 0)}
             icon={Wallet}
-            className="border-primary/20 bg-primary/5"
-            description="Total available funds"
+            description={`Jahresbeginn ${year}`}
           />
           <StatCard
-            title="Total Income (YTD)"
+            title="Kassenbestand"
+            value={formatCurrency(stats?.cashPosition || 0)}
+            icon={Wallet}
+            className="border-primary/20 bg-primary/5"
+            description="Aktueller Stand"
+          />
+          <StatCard
+            title="Einnahmen"
             value={formatCurrency(stats?.totalIncome || 0)}
             icon={TrendingUp}
             trend="up"
-            trendValue="+12%" // Ideally dynamic
-            description="vs last year"
+            description="Summe Zuflüsse"
           />
           <StatCard
-            title="Total Expenses (YTD)"
+            title="Ausgaben"
             value={formatCurrency(stats?.totalExpenses || 0)}
             icon={TrendingDown}
             trend="down"
-            trendValue="+4%"
-            description="vs last year"
+            description="Summe Abflüsse"
           />
           <StatCard
-            title="Net Result"
-            value={formatCurrency(stats?.netResult || 0)}
+            title="Cashflow"
+            value={formatCurrency(stats?.cashFlow || 0)}
             icon={Euro}
-            trend={stats?.netResult && stats.netResult >= 0 ? "up" : "down"}
-            description="Income - Expenses"
-            className={stats?.netResult && stats.netResult < 0 ? "border-red-200 bg-red-50 dark:bg-red-900/10" : "border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10"}
+            trend={stats?.cashFlow && stats.cashFlow >= 0 ? "up" : "down"}
+            description="Einnahmen - Ausgaben"
+            className={stats?.cashFlow && stats.cashFlow < 0 ? "border-red-200 bg-red-50 dark:bg-red-900/10" : "border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10"}
           />
         </div>
 

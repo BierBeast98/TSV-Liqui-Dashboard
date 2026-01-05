@@ -116,10 +116,11 @@ export const api = {
       input: z.object({ year: z.coerce.number().optional() }).optional(),
       responses: {
         200: z.object({
-          currentBalance: z.number(),
+          openingBalance: z.number(),
+          cashPosition: z.number(),
           totalIncome: z.number(),
           totalExpenses: z.number(),
-          netResult: z.number()
+          cashFlow: z.number()
         })
       }
     },

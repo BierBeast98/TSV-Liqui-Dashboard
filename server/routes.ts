@@ -288,14 +288,27 @@ export async function registerRoutes(
     const year = Number(req.query.year) || 2024;
     const account = req.query.account as string | undefined;
     const stats = await storage.getTotalStats(year, account);
-    const history = await storage.getBalanceHistory(year, account);
-    const currentBalance = history.length > 0 ? history[history.length - 1].balance : 0;
+    
+    // Get opening balance from account_balances table
+    let openingBalance = 0;
+    const balances = await storage.getAccountBalances(year);
+    if (balances.length > 0) {
+      // Sum all account opening balances (or filter by account if specified)
+      openingBalance = balances.reduce((sum, b) => sum + (b.openingBalance || 0), 0);
+    }
+    
+    // Cash flow = income - expenses (net movement for the year)
+    const cashFlow = stats.income - stats.expenses;
+    
+    // Cash position = opening balance + all transactions (income + negative expenses)
+    const cashPosition = openingBalance + cashFlow;
     
     res.json({
-      currentBalance,
+      openingBalance,
+      cashPosition,
       totalIncome: stats.income,
       totalExpenses: stats.expenses,
-      netResult: stats.income - stats.expenses
+      cashFlow
     });
   });
 
