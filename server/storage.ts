@@ -1,10 +1,11 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts, euerReports, euerLineItems,
+  categories, transactions, accounts, accountBalances, euerReports, euerLineItems,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
   type Account, type TransactionResponse,
+  type AccountBalance, type InsertAccountBalance,
   type EuerReport, type InsertEuerReport,
   type EuerLineItem, type InsertEuerLineItem
 } from "@shared/schema";
@@ -24,6 +25,11 @@ export interface IStorage extends IAuthStorage {
   getAccounts(): Promise<Account[]>;
   getAccountByIban(iban: string): Promise<Account | undefined>;
   getOrCreateAccount(iban: string, name?: string): Promise<Account>;
+
+  // Account Balances (Opening balances per year)
+  getAccountBalances(year: number): Promise<(AccountBalance & { accountName: string; iban: string })[]>;
+  getAccountBalance(accountId: number, year: number): Promise<AccountBalance | undefined>;
+  upsertAccountBalance(balance: InsertAccountBalance): Promise<AccountBalance>;
 
   // Transactions
   getTransactions(params?: { 
@@ -192,6 +198,41 @@ export class DatabaseStorage implements IStorage {
     const displayName = name || `Konto ****${iban.slice(-4)}`;
     const [newAccount] = await db.insert(accounts).values({ iban, name: displayName }).returning();
     return newAccount;
+  }
+
+  async getAccountBalances(year: number): Promise<(AccountBalance & { accountName: string; iban: string })[]> {
+    const result = await db.select({
+      id: accountBalances.id,
+      accountId: accountBalances.accountId,
+      year: accountBalances.year,
+      openingBalance: accountBalances.openingBalance,
+      accountName: accounts.name,
+      iban: accounts.iban,
+    })
+    .from(accountBalances)
+    .innerJoin(accounts, eq(accountBalances.accountId, accounts.id))
+    .where(eq(accountBalances.year, year));
+    return result;
+  }
+
+  async getAccountBalance(accountId: number, year: number): Promise<AccountBalance | undefined> {
+    const [balance] = await db.select()
+      .from(accountBalances)
+      .where(and(eq(accountBalances.accountId, accountId), eq(accountBalances.year, year)));
+    return balance;
+  }
+
+  async upsertAccountBalance(balance: InsertAccountBalance): Promise<AccountBalance> {
+    const existing = await this.getAccountBalance(balance.accountId, balance.year);
+    if (existing) {
+      const [updated] = await db.update(accountBalances)
+        .set({ openingBalance: balance.openingBalance })
+        .where(eq(accountBalances.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(accountBalances).values(balance).returning();
+    return created;
   }
 
   async getTransactions(params?: { 

@@ -88,6 +88,31 @@ export async function registerRoutes(
     res.json(accs);
   });
 
+  // === Account Balances (Opening balances per year) ===
+  app.get("/api/account-balances/:year", isAuthenticated, async (req, res) => {
+    const year = Number(req.params.year);
+    const balances = await storage.getAccountBalances(year);
+    res.json(balances);
+  });
+
+  app.post("/api/account-balances", isAuthenticated, async (req, res) => {
+    try {
+      const { accountId, year, openingBalance } = req.body;
+      if (!accountId || !year || openingBalance === undefined) {
+        return res.status(400).json({ message: "accountId, year und openingBalance erforderlich" });
+      }
+      const balance = await storage.upsertAccountBalance({
+        accountId: Number(accountId),
+        year: Number(year),
+        openingBalance: Number(openingBalance),
+      });
+      res.status(201).json(balance);
+    } catch (e) {
+      console.error("Error upserting account balance:", e);
+      res.status(500).json({ message: "Fehler beim Speichern des Anfangssaldos" });
+    }
+  });
+
   // === Transactions ===
   app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
     const query = req.query as any;

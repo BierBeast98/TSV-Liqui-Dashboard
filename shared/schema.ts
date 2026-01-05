@@ -21,6 +21,14 @@ export const accounts = pgTable("accounts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Opening balances per account per year
+export const accountBalances = pgTable("account_balances", {
+  id: serial("id").primaryKey(),
+  accountId: integer("account_id").references(() => accounts.id).notNull(),
+  year: integer("year").notNull(),
+  openingBalance: real("opening_balance").notNull().default(0),
+});
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   date: timestamp("date").notNull(),
@@ -36,6 +44,7 @@ export const transactions = pgTable("transactions", {
 
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, createdAt: true });
+export const insertAccountBalanceSchema = createInsertSchema(accountBalances).omit({ id: true });
 export const insertTransactionSchema = createInsertSchema(transactions, {
   date: z.coerce.date(),
 }).omit({ id: true, createdAt: true });
@@ -44,6 +53,8 @@ export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = z.infer<typeof insertAccountSchema>;
+export type AccountBalance = typeof accountBalances.$inferSelect;
+export type InsertAccountBalance = z.infer<typeof insertAccountBalanceSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
@@ -66,10 +77,11 @@ export interface TransactionQueryParams {
 
 // Stats / Dashboard
 export interface DashboardStats {
-  currentBalance: number;
-  totalIncome: number;
-  totalExpenses: number;
-  netResult: number;
+  openingBalance: number;    // Anfangssaldo des Jahres
+  cashPosition: number;      // Kassenbestand = Anfangssaldo + alle Buchungen
+  totalIncome: number;       // Einnahmen (positive Buchungen)
+  totalExpenses: number;     // Ausgaben (negative Buchungen)
+  cashFlow: number;          // Cashflow = Einnahmen - Ausgaben
 }
 
 export interface MonthlyStats {
