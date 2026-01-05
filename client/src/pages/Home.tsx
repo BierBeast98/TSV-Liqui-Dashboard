@@ -29,10 +29,16 @@ import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import type { Account } from "@shared/schema";
 
 export default function Home() {
   const [year, setYear] = useState<number>(2024);
   const [accountFilter, setAccountFilter] = useState<string>("all");
+  
+  const { data: accounts } = useQuery<Account[]>({
+    queryKey: ["/api/accounts"],
+  });
   
   const { data: stats, isLoading: statsLoading } = useDashboardStats({ 
     year, 
@@ -76,15 +82,17 @@ export default function Home() {
             </Select>
 
             <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger className="w-[180px] rounded-lg">
+              <SelectTrigger className="w-[180px] rounded-lg" data-testid="select-account-filter">
                 <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Konto" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Konten</SelectItem>
-                <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
-                <SelectItem value="Sparkonto">Sparkonto</SelectItem>
-                <SelectItem value="Handkasse">Handkasse</SelectItem>
+                {accounts?.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.name} data-testid={`select-account-${acc.id}`}>
+                    {acc.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
