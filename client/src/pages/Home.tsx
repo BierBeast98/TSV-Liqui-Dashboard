@@ -82,14 +82,14 @@ export default function Home() {
             </Select>
 
             <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger className="w-[180px] rounded-lg" data-testid="select-account-filter">
+              <SelectTrigger className="w-[200px] rounded-lg" data-testid="select-account-filter">
                 <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Konto" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Konten</SelectItem>
                 {accounts?.map((acc) => (
-                  <SelectItem key={acc.id} value={acc.name} data-testid={`select-account-${acc.id}`}>
+                  <SelectItem key={acc.id} value={acc.iban} data-testid={`select-account-${acc.id}`}>
                     {acc.name}
                   </SelectItem>
                 ))}
