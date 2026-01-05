@@ -9,6 +9,7 @@ import multer from "multer";
 import { parse } from "csv-parse/sync";
 import path from "path";
 import fs from "fs";
+import { processAssistantQuery } from "./assistant";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -496,7 +497,7 @@ export async function registerRoutes(
       if (!validFiscalAreas.includes(fiscalArea)) {
         return res.status(400).json({ message: "Ungültiger Tätigkeitsbereich" });
       }
-      const items = await storage.getEuerLineItemsByArea(report.id, fiscalArea);
+      const items = await storage.getEuerLineItemsByArea(report.id, fiscalArea as "ideell" | "vermoegensverwaltung" | "zweckbetrieb" | "wirtschaftlich");
       res.json(items);
     } else {
       const items = await storage.getEuerLineItems(report.id);
@@ -660,6 +661,42 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     await storage.deleteEventEntry(id);
     res.status(204).send();
+  });
+
+  // === AI Assistant ===
+  app.post("/api/assistant", isAuthenticated, async (req, res) => {
+    try {
+      const { message, year, account } = req.body;
+      
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: "Nachricht erforderlich" });
+      }
+      
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      
+      const stream = await processAssistantQuery({
+        message,
+        year: year || 2024,
+        account: account || undefined,
+      });
+      
+      for await (const chunk of stream) {
+        res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
+      }
+      
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    } catch (error) {
+      console.error("Assistant error:", error);
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: "Ein Fehler ist aufgetreten" })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ error: "Ein Fehler ist aufgetreten" });
+      }
+    }
   });
 
   return httpServer;

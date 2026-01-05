@@ -3,6 +3,8 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 // Import auth tables to include them in the schema for migrations
 export * from "./models/auth";
+// Import chat tables for AI assistant
+export * from "./models/chat";
 
 // === TABLE DEFINITIONS ===
 

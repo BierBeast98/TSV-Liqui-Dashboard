@@ -15,6 +15,7 @@ import EventDetail from "@/pages/EventDetail";
 import Login from "@/pages/Login";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
+import { ChatWidget } from "@/components/ChatWidget";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -31,7 +32,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Login />;
   }
 
-  return <Component />;
+  return (
+    <>
+      <Component />
+      <ChatWidget year={new Date().getFullYear()} />
+    </>
+  );
 }
 
 function Router() {
