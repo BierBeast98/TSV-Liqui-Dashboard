@@ -8,7 +8,8 @@ import {
   Wallet,
   Loader2,
   PieChart as PieChartIcon,
-  Filter
+  Filter,
+  X
 } from "lucide-react";
 import { 
   BarChart, 
@@ -32,9 +33,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery } from "@tanstack/react-query";
 import type { Account } from "@shared/schema";
 
+interface TransactionWithDetails {
+  id: number;
+  date: Date;
+  amount: number;
+  description: string;
+  categoryId: number | null;
+  accountId: number | null;
+  account: string | null;
+  recurring: boolean | null;
+  hash: string | null;
+  createdAt: Date | null;
+  categoryName?: string | null;
+  categoryType?: string | null;
+  accountName?: string | null;
+}
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+interface DrillDownData {
+  month: string;
+  type: "income" | "expenses" | "all";
+}
+
 export default function Home() {
   const [year, setYear] = useState<number>(2024);
   const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
   
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
@@ -48,6 +75,44 @@ export default function Home() {
     year, 
     account: accountFilter !== "all" ? accountFilter : undefined 
   });
+
+  const { data: drillDownTransactions, isLoading: drillDownLoading } = useQuery<TransactionWithDetails[]>({
+    queryKey: ["/api/transactions", { year, account: accountFilter !== "all" ? accountFilter : undefined }],
+    enabled: !!drillDown,
+  });
+
+  const filteredTransactions = drillDownTransactions?.filter(tx => {
+    if (!drillDown) return false;
+    const txDate = new Date(tx.date);
+    const txMonth = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+    if (txMonth !== drillDown.month) return false;
+    
+    if (drillDown.type === "income") return tx.amount > 0;
+    if (drillDown.type === "expenses") return tx.amount < 0;
+    return true;
+  }) || [];
+
+  const getMonthName = (monthStr: string) => {
+    const [y, m] = monthStr.split('-');
+    const date = new Date(Number(y), Number(m) - 1);
+    return date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  };
+
+  const handleBarClick = (data: any, type: "income" | "expenses") => {
+    if (data && data.activePayload && data.activePayload[0]) {
+      const monthData = data.activePayload[0].payload;
+      const monthKey = charts?.incomeVsExpenses.find(
+        (item: any) => item.month === monthData.month
+      );
+      if (monthKey) {
+        const monthIndex = charts?.incomeVsExpenses.indexOf(monthKey);
+        if (monthIndex !== undefined && monthIndex >= 0) {
+          const fullMonth = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+          setDrillDown({ month: fullMonth, type });
+        }
+      }
+    }
+  };
 
   const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#f97316'];
 
@@ -141,13 +206,23 @@ export default function Home() {
         <div className="grid gap-4 md:grid-cols-7">
           <Card className="col-span-4 rounded-xl shadow-sm border-border/60">
             <CardHeader>
-              <CardTitle>Income vs Expenses</CardTitle>
-              <CardDescription>Monthly comparison for the current year</CardDescription>
+              <CardTitle>Einnahmen vs Ausgaben</CardTitle>
+              <CardDescription>Klicken Sie auf einen Balken für Details</CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={charts?.incomeVsExpenses}>
+                  <BarChart 
+                    data={charts?.incomeVsExpenses}
+                    onClick={(data) => {
+                      if (data && data.activeTooltipIndex !== undefined) {
+                        const monthIndex = data.activeTooltipIndex;
+                        const fullMonth = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+                        setDrillDown({ month: fullMonth, type: "all" });
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
                     <XAxis 
                       dataKey="month" 
@@ -164,11 +239,22 @@ export default function Home() {
                       tickFormatter={(value) => `€${value}`}
                     />
                     <Tooltip 
-                      cursor={{ fill: 'transparent' }}
+                      cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                      formatter={(value: number) => formatCurrency(value)}
                     />
-                    <Bar dataKey="income" name="Income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="expenses" name="Expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                    <Bar 
+                      dataKey="income" 
+                      name="Einnahmen" 
+                      fill="hsl(var(--primary))" 
+                      radius={[4, 4, 0, 0]} 
+                    />
+                    <Bar 
+                      dataKey="expenses" 
+                      name="Ausgaben" 
+                      fill="hsl(var(--destructive))" 
+                      radius={[4, 4, 0, 0]} 
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -177,8 +263,8 @@ export default function Home() {
 
           <Card className="col-span-3 rounded-xl shadow-sm border-border/60">
             <CardHeader>
-              <CardTitle>Category Distribution</CardTitle>
-              <CardDescription>Where your money goes</CardDescription>
+              <CardTitle>Kategorien-Verteilung</CardTitle>
+              <CardDescription>Wohin fließt das Geld</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
@@ -197,7 +283,10 @@ export default function Home() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -216,8 +305,8 @@ export default function Home() {
         {/* Charts Section 2 */}
         <Card className="rounded-xl shadow-sm border-border/60">
             <CardHeader>
-              <CardTitle>Balance Trend</CardTitle>
-              <CardDescription>Account balance evolution over time</CardDescription>
+              <CardTitle>Kontostand-Verlauf</CardTitle>
+              <CardDescription>Entwicklung des Kontostands über die Zeit</CardDescription>
             </CardHeader>
             <CardContent className="pl-2">
               <div className="h-[300px]">
@@ -230,7 +319,7 @@ export default function Home() {
                       fontSize={12} 
                       tickLine={false} 
                       axisLine={false}
-                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString('de-DE', { month: 'short', day: 'numeric' })}
                     />
                     <YAxis
                       stroke="#888888"
@@ -241,7 +330,8 @@ export default function Home() {
                     />
                     <Tooltip 
                       contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                      labelFormatter={(value) => new Date(value).toLocaleDateString('de-DE')}
+                      formatter={(value: number) => formatCurrency(value)}
                     />
                     <Line 
                       type="monotone" 
@@ -257,6 +347,105 @@ export default function Home() {
             </CardContent>
           </Card>
       </div>
+
+      {/* Drill-Down Dialog */}
+      <Dialog open={!!drillDown} onOpenChange={(open) => !open && setDrillDown(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-4">
+              <span>
+                Buchungen {drillDown && getMonthName(drillDown.month)}
+                {drillDown?.type === "income" && " - Einnahmen"}
+                {drillDown?.type === "expenses" && " - Ausgaben"}
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              {filteredTransactions.length} Buchungen gefunden
+              {drillDown?.type === "all" && (
+                <span className="ml-2">
+                  (Einnahmen: {formatCurrency(filteredTransactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0))}, 
+                  Ausgaben: {formatCurrency(Math.abs(filteredTransactions.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0)))})
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex gap-2 mb-4">
+            <Button 
+              variant={drillDown?.type === "all" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => drillDown && setDrillDown({ ...drillDown, type: "all" })}
+              data-testid="button-filter-all"
+            >
+              Alle
+            </Button>
+            <Button 
+              variant={drillDown?.type === "income" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => drillDown && setDrillDown({ ...drillDown, type: "income" })}
+              data-testid="button-filter-income"
+            >
+              Nur Einnahmen
+            </Button>
+            <Button 
+              variant={drillDown?.type === "expenses" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => drillDown && setDrillDown({ ...drillDown, type: "expenses" })}
+              data-testid="button-filter-expenses"
+            >
+              Nur Ausgaben
+            </Button>
+          </div>
+
+          <ScrollArea className="h-[50vh]">
+            {drillDownLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                Keine Buchungen gefunden
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredTransactions
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((tx) => (
+                  <div 
+                    key={tx.id} 
+                    className="flex items-start justify-between gap-4 p-3 rounded-lg border bg-card hover-elevate"
+                    data-testid={`row-transaction-${tx.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">
+                          {new Date(tx.date).toLocaleDateString('de-DE')}
+                        </span>
+                        {tx.categoryName && (
+                          <Badge variant="secondary" className="text-xs">
+                            {tx.categoryName}
+                          </Badge>
+                        )}
+                        {tx.accountName && (
+                          <Badge variant="outline" className="text-xs">
+                            {tx.accountName}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {tx.description}
+                      </p>
+                    </div>
+                    <div className={`text-sm font-semibold whitespace-nowrap ${tx.amount > 0 ? 'text-primary' : 'text-destructive'}`}>
+                      {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
