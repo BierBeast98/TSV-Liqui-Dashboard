@@ -297,10 +297,7 @@ export class DatabaseStorage implements IStorage {
         continue;
       }
 
-      const [insertedTx] = await db.insert(transactions).values({ ...tx, hash }).returning();
-      if (insertedTx) {
-        await this.autoCategorize(insertedTx.id);
-      }
+      await db.insert(transactions).values({ ...tx, hash }).returning();
       imported++;
     }
     return { imported, duplicates };
