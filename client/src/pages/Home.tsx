@@ -52,6 +52,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useYear } from "@/contexts/YearContext";
 
 interface DrillDownData {
   month: string;
@@ -59,7 +60,7 @@ interface DrillDownData {
 }
 
 export default function Home() {
-  const [year, setYear] = useState<number>(2024);
+  const { selectedYear: year, setSelectedYear: setYear } = useYear();
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
   
