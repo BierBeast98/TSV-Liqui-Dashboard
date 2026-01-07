@@ -214,3 +214,31 @@ export type InsertContract = z.infer<typeof insertContractSchema>;
 export interface ContractWithCategory extends Contract {
   categoryName?: string;
 }
+
+// === Contract Suggestions (auto-detected recurring payments) ===
+
+export const contractSuggestions = pgTable("contract_suggestions", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  amount: real("amount").notNull(),
+  frequency: text("frequency", { enum: ["monthly", "quarterly", "yearly"] }).notNull(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  categoryId: integer("category_id").references(() => categories.id),
+  accountId: integer("account_id").references(() => accounts.id),
+  confidence: real("confidence").default(0.5),
+  status: text("status", { enum: ["pending", "accepted", "dismissed"] }).default("pending"),
+  sourceTransactionIds: text("source_transaction_ids").array(),
+  sampleDates: text("sample_dates").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContractSuggestionSchema = createInsertSchema(contractSuggestions).omit({ id: true, createdAt: true });
+
+export type ContractSuggestion = typeof contractSuggestions.$inferSelect;
+export type InsertContractSuggestion = z.infer<typeof insertContractSuggestionSchema>;
+
+export interface ContractSuggestionWithDetails extends ContractSuggestion {
+  categoryName?: string;
+  accountName?: string;
+}
