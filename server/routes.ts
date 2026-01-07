@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertTransactionSchema, type InsertTransaction } from "@shared/schema";
+import { insertTransactionSchema, insertContractSchema, type InsertTransaction } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
@@ -660,6 +660,48 @@ export async function registerRoutes(
   app.delete("/api/event-entries/:id", isAuthenticated, async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteEventEntry(id);
+    res.status(204).send();
+  });
+
+  // === Contracts (Verträge) ===
+  app.get("/api/contracts", isAuthenticated, async (req, res) => {
+    const includeInactive = req.query.includeInactive === "true";
+    const contracts = await storage.getContracts(includeInactive);
+    res.json(contracts);
+  });
+
+  app.get("/api/contracts/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    const contract = await storage.getContract(id);
+    if (!contract) {
+      return res.status(404).json({ error: "Vertrag nicht gefunden" });
+    }
+    res.json(contract);
+  });
+
+  app.post("/api/contracts", isAuthenticated, async (req, res) => {
+    try {
+      const contractData = insertContractSchema.parse(req.body);
+      const contract = await storage.createContract(contractData);
+      res.status(201).json(contract);
+    } catch (error) {
+      res.status(400).json({ error: "Ungültige Vertragsdaten" });
+    }
+  });
+
+  app.patch("/api/contracts/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    const updates = { ...req.body };
+    if (updates.startDate) updates.startDate = new Date(updates.startDate);
+    if (updates.endDate) updates.endDate = new Date(updates.endDate);
+    if (updates.nextDueDate) updates.nextDueDate = new Date(updates.nextDueDate);
+    const contract = await storage.updateContract(id, updates);
+    res.json(contract);
+  });
+
+  app.delete("/api/contracts/:id", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.deleteContract(id);
     res.status(204).send();
   });
 

@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries,
+  categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
@@ -9,7 +9,8 @@ import {
   type EuerReport, type InsertEuerReport,
   type EuerLineItem, type InsertEuerLineItem,
   type Event, type InsertEvent, type EventWithTotals,
-  type EventEntry, type InsertEventEntry
+  type EventEntry, type InsertEventEntry,
+  type Contract, type InsertContract, type ContractWithCategory
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -83,6 +84,13 @@ export interface IStorage extends IAuthStorage {
   createEventEntry(entry: InsertEventEntry): Promise<EventEntry>;
   updateEventEntry(id: number, updates: Partial<InsertEventEntry>): Promise<EventEntry>;
   deleteEventEntry(id: number): Promise<void>;
+  
+  // Contracts (recurring payments/income)
+  getContracts(includeInactive?: boolean): Promise<ContractWithCategory[]>;
+  getContract(id: number): Promise<Contract | undefined>;
+  createContract(contract: InsertContract): Promise<Contract>;
+  updateContract(id: number, updates: Partial<InsertContract>): Promise<Contract>;
+  deleteContract(id: number): Promise<void>;
 }
 
 export interface FiscalAreaSummary {
@@ -729,6 +737,39 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEventEntry(id: number): Promise<void> {
     await db.delete(eventEntries).where(eq(eventEntries.id, id));
+  }
+
+  // Contracts (recurring payments/income)
+  async getContracts(includeInactive: boolean = false): Promise<ContractWithCategory[]> {
+    const allContracts = await db.select().from(contracts).orderBy(contracts.name);
+    const cats = await this.getCategories();
+    const catMap = new Map(cats.map(c => [c.id, c.name]));
+    
+    return allContracts
+      .filter(c => includeInactive || c.isActive)
+      .map(c => ({
+        ...c,
+        categoryName: c.categoryId ? catMap.get(c.categoryId) : undefined
+      }));
+  }
+
+  async getContract(id: number): Promise<Contract | undefined> {
+    const [contract] = await db.select().from(contracts).where(eq(contracts.id, id));
+    return contract;
+  }
+
+  async createContract(contract: InsertContract): Promise<Contract> {
+    const [created] = await db.insert(contracts).values(contract).returning();
+    return created;
+  }
+
+  async updateContract(id: number, updates: Partial<InsertContract>): Promise<Contract> {
+    const [updated] = await db.update(contracts).set(updates).where(eq(contracts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteContract(id: number): Promise<void> {
+    await db.delete(contracts).where(eq(contracts.id, id));
   }
 }
 
