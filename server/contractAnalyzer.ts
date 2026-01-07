@@ -4,6 +4,7 @@ import type { TransactionResponse, InsertContractSuggestion } from "@shared/sche
 interface TransactionCluster {
   name: string;
   description: string;
+  counterparty: string | null;
   amount: number;
   type: "income" | "expense";
   accountId: number | null;
@@ -104,6 +105,41 @@ function extractContractName(transactions: TransactionResponse[]): string {
   return firstDesc.substring(0, 30);
 }
 
+function extractCounterparty(transactions: TransactionResponse[]): string | null {
+  const firstDesc = transactions[0]?.description || "";
+  
+  const bnamMatch = firstDesc.match(/BNAM:\s*([^,]+)/i);
+  if (bnamMatch) return bnamMatch[1].trim().substring(0, 60);
+  
+  const namePatterns = [
+    /(?:Auftraggeber|Empfaenger|Name):\s*([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\s\.\-&]+)/i,
+    /(?:von|an)\s+([A-Z][A-Za-zÄÖÜäöüß\s\.\-&]{3,30})/
+  ];
+  
+  for (const pattern of namePatterns) {
+    const match = firstDesc.match(pattern);
+    if (match) {
+      const name = match[1].trim();
+      if (name.length >= 3 && !/^[A-Z]{2}\d{2}/.test(name)) {
+        return name.substring(0, 60);
+      }
+    }
+  }
+  
+  const words = firstDesc.split(/\s+/);
+  for (let i = 0; i < Math.min(5, words.length); i++) {
+    const word = words[i];
+    if (/^[A-ZÄÖÜ][a-zäöüß]+$/.test(word) && word.length >= 3) {
+      const possibleName = words.slice(i, i + 3).join(" ");
+      if (!/IBAN|BIC|MREF|EREF|CRED/i.test(possibleName)) {
+        return possibleName.substring(0, 60);
+      }
+    }
+  }
+  
+  return null;
+}
+
 export async function analyzeRecurringTransactions(): Promise<void> {
   await storage.clearPendingSuggestions();
   
@@ -163,6 +199,7 @@ export async function analyzeRecurringTransactions(): Promise<void> {
     clusters.push({
       name: extractContractName(transactions),
       description: transactions[0].description.substring(0, 100),
+      counterparty: extractCounterparty(transactions),
       amount: signedAmount,
       type,
       accountId: transactions[0].accountId,
@@ -189,6 +226,7 @@ export async function analyzeRecurringTransactions(): Promise<void> {
     const suggestion: InsertContractSuggestion = {
       name: cluster.name,
       description: cluster.description,
+      counterparty: cluster.counterparty,
       amount: cluster.amount,
       frequency: cluster.frequency!,
       type: cluster.type,

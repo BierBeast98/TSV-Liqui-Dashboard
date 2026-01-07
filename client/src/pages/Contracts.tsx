@@ -499,6 +499,9 @@ export default function Contracts() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate text-sm">{suggestion.name}</p>
+                        {suggestion.counterparty && (
+                          <p className="text-xs text-foreground/70 truncate">{suggestion.counterparty}</p>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {frequencyLabels[suggestion.frequency as Frequency]} • {suggestion.sampleDates?.length || 0} Buchungen erkannt
                         </p>

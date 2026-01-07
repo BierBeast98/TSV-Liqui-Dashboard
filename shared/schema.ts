@@ -221,6 +221,7 @@ export const contractSuggestions = pgTable("contract_suggestions", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  counterparty: text("counterparty"),
   amount: real("amount").notNull(),
   frequency: text("frequency", { enum: ["monthly", "quarterly", "yearly"] }).notNull(),
   type: text("type", { enum: ["income", "expense"] }).notNull(),
