@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power } from "lucide-react";
+import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power, Sparkles, Check, X, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
-import type { ContractWithCategory, Category } from "@shared/schema";
+import type { ContractWithCategory, Category, ContractSuggestionWithDetails } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 type Frequency = "monthly" | "quarterly" | "yearly";
 type ContractType = "income" | "expense";
@@ -95,6 +96,51 @@ export default function Contracts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+    }
+  });
+
+  const { toast } = useToast();
+
+  const { data: suggestions, isLoading: suggestionsLoading } = useQuery<ContractSuggestionWithDetails[]>({
+    queryKey: ["/api/contracts/suggestions", "pending"],
+    queryFn: async () => {
+      const res = await fetch("/api/contracts/suggestions?status=pending", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch suggestions");
+      return res.json();
+    }
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/contracts/suggestions/run", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts/suggestions"] });
+      toast({ title: "Analyse abgeschlossen", description: "Buchungen wurden nach wiederkehrenden Zahlungen durchsucht." });
+    },
+    onError: () => {
+      toast({ title: "Fehler", description: "Analyse konnte nicht durchgeführt werden.", variant: "destructive" });
+    }
+  });
+
+  const acceptSuggestionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("POST", `/api/contracts/suggestions/${id}/accept`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts/suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+      toast({ title: "Vertrag erstellt", description: "Der Vorschlag wurde als Vertrag übernommen." });
+    }
+  });
+
+  const dismissSuggestionMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("POST", `/api/contracts/suggestions/${id}/dismiss`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts/suggestions"] });
+      toast({ title: "Vorschlag abgelehnt" });
     }
   });
 
@@ -400,6 +446,101 @@ export default function Contracts() {
             </Dialog>
           </div>
         </div>
+
+        {/* Suggestions Panel */}
+        <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Erkannte wiederkehrende Zahlungen
+              </CardTitle>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => analyzeMutation.mutate()}
+                disabled={analyzeMutation.isPending}
+                data-testid="button-analyze-contracts"
+              >
+                {analyzeMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Buchungen analysieren
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {suggestionsLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : suggestions && suggestions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground mb-3">
+                  {suggestions.length} Vorschläge gefunden. Übernehmen Sie passende als Verträge.
+                </p>
+                {suggestions.map(suggestion => (
+                  <div 
+                    key={suggestion.id} 
+                    className="flex items-center justify-between gap-4 p-3 rounded-md bg-background border"
+                    data-testid={`suggestion-${suggestion.id}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
+                        suggestion.type === "income" ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
+                      }`}>
+                        {suggestion.type === "income" ? (
+                          <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate text-sm">{suggestion.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {frequencyLabels[suggestion.frequency as Frequency]} • {suggestion.sampleDates?.length || 0} Buchungen erkannt
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-semibold text-sm whitespace-nowrap ${
+                        suggestion.type === "income" ? "text-green-600 dark:text-green-400" : ""
+                      }`}>
+                        {suggestion.type === "income" ? "+" : ""}{formatCurrency(Math.abs(suggestion.amount))}
+                      </span>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        onClick={() => acceptSuggestionMutation.mutate(suggestion.id)}
+                        disabled={acceptSuggestionMutation.isPending}
+                        title="Als Vertrag übernehmen"
+                        data-testid={`button-accept-suggestion-${suggestion.id}`}
+                      >
+                        <Check className="w-4 h-4 text-green-500" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        onClick={() => dismissSuggestionMutation.mutate(suggestion.id)}
+                        disabled={dismissSuggestionMutation.isPending}
+                        title="Ablehnen"
+                        data-testid={`button-dismiss-suggestion-${suggestion.id}`}
+                      >
+                        <X className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Keine Vorschläge vorhanden. Klicken Sie auf "Buchungen analysieren", um wiederkehrende Zahlungen zu erkennen.
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
           <Card>

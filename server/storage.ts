@@ -827,12 +827,17 @@ export class DatabaseStorage implements IStorage {
     const suggestion = await this.getContractSuggestion(id);
     if (!suggestion) throw new Error("Vorschlag nicht gefunden");
     
+    const type = suggestion.type as "income" | "expense";
+    const signedAmount = type === "expense" 
+      ? -Math.abs(suggestion.amount) 
+      : Math.abs(suggestion.amount);
+    
     const contract = await this.createContract({
       name: suggestion.name,
       description: suggestion.description,
-      amount: suggestion.amount,
+      amount: signedAmount,
       frequency: suggestion.frequency as "monthly" | "quarterly" | "yearly",
-      type: suggestion.type as "income" | "expense",
+      type,
       categoryId: suggestion.categoryId,
       isActive: true
     });

@@ -102,14 +102,27 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   
   for (const tx of nonTransfers) {
     const type = tx.amount >= 0 ? "income" : "expense";
-    const roundedAmount = Math.round(Math.abs(tx.amount) * 100) / 100;
-    const normalizedDesc = normalizeDescription(tx.description);
-    const bucketKey = `${type}:${tx.accountId}:${roundedAmount}:${normalizedDesc.substring(0, 20)}`;
+    const roundedAmount = Math.round(Math.abs(tx.amount) / 5) * 5;
     
-    if (!buckets.has(bucketKey)) {
-      buckets.set(bucketKey, []);
+    let foundBucket = false;
+    const bucketEntries = Array.from(buckets.entries());
+    for (const [key, existingTxs] of bucketEntries) {
+      if (!key.startsWith(`${type}:${tx.accountId}:`)) continue;
+      const existingAmount = parseFloat(key.split(":")[2]);
+      if (Math.abs(existingAmount - roundedAmount) > existingAmount * 0.05) continue;
+      
+      const similarity = calculateSimilarity(tx.description, existingTxs[0].description);
+      if (similarity >= 0.5) {
+        existingTxs.push(tx);
+        foundBucket = true;
+        break;
+      }
     }
-    buckets.get(bucketKey)!.push(tx);
+    
+    if (!foundBucket) {
+      const bucketKey = `${type}:${tx.accountId}:${roundedAmount}`;
+      buckets.set(bucketKey, [tx]);
+    }
   }
   
   const clusters: TransactionCluster[] = [];
@@ -145,7 +158,13 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   const existingContracts = await storage.getContracts(true);
   const existingNames = new Set(existingContracts.map(c => c.name.toLowerCase()));
   
-  const newClusters = clusters.filter(c => !existingNames.has(c.name.toLowerCase()));
+  const dismissedSuggestions = await storage.getContractSuggestions("dismissed");
+  const dismissedNames = new Set(dismissedSuggestions.map(s => s.name.toLowerCase()));
+  
+  const newClusters = clusters.filter(c => 
+    !existingNames.has(c.name.toLowerCase()) && 
+    !dismissedNames.has(c.name.toLowerCase())
+  );
   
   for (const cluster of newClusters) {
     const suggestion: InsertContractSuggestion = {
