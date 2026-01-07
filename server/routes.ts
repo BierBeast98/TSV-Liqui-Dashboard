@@ -233,6 +233,7 @@ export async function registerRoutes(
         const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
         const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
         const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
+        const counterpartyStr = r['Name Zahlungsbeteiligter'] || r['Zahlungsbeteiligter'] || r['Empfänger'] || r['Auftraggeber'] || '';
         
         if (!dateStr || !amountStr) return null;
 
@@ -250,11 +251,14 @@ export async function registerRoutes(
         } else {
           amount = Number(amountStr);
         }
+        
+        const counterparty = counterpartyStr ? String(counterpartyStr).trim() : null;
 
         return {
           date: date,
           amount: amount,
           description: String(descStr || "No description"),
+          counterparty: counterparty || undefined,
           accountId: account.id,
           account: account.name, // Legacy support
           hash: "",
@@ -284,6 +288,22 @@ export async function registerRoutes(
       }
     }
     res.json({ migratedCount });
+  });
+  
+  app.get("/api/migration/backfill-counterparty", isAuthenticated, async (req, res) => {
+    const txs = await storage.getTransactions();
+    let updatedCount = 0;
+    
+    for (const tx of txs) {
+      if (!tx.counterparty) {
+        const bnamMatch = tx.description.match(/BNAM:\s*([^,]+)/i);
+        if (bnamMatch) {
+          await storage.updateTransaction(tx.id, { counterparty: bnamMatch[1].trim() });
+          updatedCount++;
+        }
+      }
+    }
+    res.json({ updatedCount, message: `${updatedCount} Transaktionen mit Zahlungsbeteiligtem aktualisiert` });
   });
   app.get(api.dashboard.stats.path, isAuthenticated, async (req, res) => {
     const year = Number(req.query.year) || 2024;

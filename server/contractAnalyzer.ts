@@ -106,7 +106,14 @@ function extractContractName(transactions: TransactionResponse[]): string {
 }
 
 function extractCounterparty(transactions: TransactionResponse[]): string | null {
-  const firstDesc = transactions[0]?.description || "";
+  const firstTx = transactions[0];
+  if (!firstTx) return null;
+  
+  if (firstTx.counterparty && firstTx.counterparty.trim()) {
+    return firstTx.counterparty.trim().substring(0, 60);
+  }
+  
+  const firstDesc = firstTx.description || "";
   
   const bnamMatch = firstDesc.match(/BNAM:\s*([^,]+)/i);
   if (bnamMatch) return bnamMatch[1].trim().substring(0, 60);
@@ -122,17 +129,6 @@ function extractCounterparty(transactions: TransactionResponse[]): string | null
       const name = match[1].trim();
       if (name.length >= 3 && !/^[A-Z]{2}\d{2}/.test(name)) {
         return name.substring(0, 60);
-      }
-    }
-  }
-  
-  const words = firstDesc.split(/\s+/);
-  for (let i = 0; i < Math.min(5, words.length); i++) {
-    const word = words[i];
-    if (/^[A-ZÄÖÜ][a-zäöüß]+$/.test(word) && word.length >= 3) {
-      const possibleName = words.slice(i, i + 3).join(" ");
-      if (!/IBAN|BIC|MREF|EREF|CRED/i.test(possibleName)) {
-        return possibleName.substring(0, 60);
       }
     }
   }

@@ -36,6 +36,7 @@ export const transactions = pgTable("transactions", {
   date: timestamp("date").notNull(),
   amount: real("amount").notNull(), // Using real for float amounts
   description: text("description").notNull(),
+  counterparty: text("counterparty"), // Name Zahlungsbeteiligter from CSV
   categoryId: integer("category_id").references(() => categories.id),
   accountId: integer("account_id").references(() => accounts.id),
   account: text("account").default("Hauptkonto"), // Legacy field
