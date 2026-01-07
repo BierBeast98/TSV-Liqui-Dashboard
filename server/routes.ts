@@ -705,6 +705,41 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // === Contract Suggestions (auto-detected recurring payments) ===
+  app.get("/api/contracts/suggestions", isAuthenticated, async (req, res) => {
+    const status = req.query.status as "pending" | "accepted" | "dismissed" | undefined;
+    const suggestions = await storage.getContractSuggestions(status);
+    res.json(suggestions);
+  });
+
+  app.post("/api/contracts/suggestions/run", isAuthenticated, async (req, res) => {
+    try {
+      const { analyzeRecurringTransactions } = await import("./contractAnalyzer");
+      await analyzeRecurringTransactions();
+      const suggestions = await storage.getContractSuggestions("pending");
+      res.json({ count: suggestions.length, suggestions });
+    } catch (error) {
+      console.error("Error analyzing contracts:", error);
+      res.status(500).json({ error: "Fehler bei der Analyse" });
+    }
+  });
+
+  app.post("/api/contracts/suggestions/:id/accept", isAuthenticated, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const contract = await storage.acceptSuggestion(id);
+      res.status(201).json(contract);
+    } catch (error) {
+      res.status(400).json({ error: "Vorschlag konnte nicht übernommen werden" });
+    }
+  });
+
+  app.post("/api/contracts/suggestions/:id/dismiss", isAuthenticated, async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.updateContractSuggestionStatus(id, "dismissed");
+    res.status(204).send();
+  });
+
   // === AI Assistant ===
   app.post("/api/assistant", isAuthenticated, async (req, res) => {
     let aborted = false;

@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { 
-  categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts,
+  categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts, contractSuggestions,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
@@ -10,7 +10,8 @@ import {
   type EuerLineItem, type InsertEuerLineItem,
   type Event, type InsertEvent, type EventWithTotals,
   type EventEntry, type InsertEventEntry,
-  type Contract, type InsertContract, type ContractWithCategory
+  type Contract, type InsertContract, type ContractWithCategory,
+  type ContractSuggestion, type InsertContractSuggestion, type ContractSuggestionWithDetails
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -91,6 +92,14 @@ export interface IStorage extends IAuthStorage {
   createContract(contract: InsertContract): Promise<Contract>;
   updateContract(id: number, updates: Partial<InsertContract>): Promise<Contract>;
   deleteContract(id: number): Promise<void>;
+  
+  // Contract Suggestions (auto-detected recurring payments)
+  getContractSuggestions(status?: "pending" | "accepted" | "dismissed"): Promise<ContractSuggestionWithDetails[]>;
+  getContractSuggestion(id: number): Promise<ContractSuggestion | undefined>;
+  createContractSuggestion(suggestion: InsertContractSuggestion): Promise<ContractSuggestion>;
+  updateContractSuggestionStatus(id: number, status: "pending" | "accepted" | "dismissed"): Promise<ContractSuggestion>;
+  clearPendingSuggestions(): Promise<void>;
+  acceptSuggestion(id: number): Promise<Contract>;
 }
 
 export interface FiscalAreaSummary {
@@ -770,6 +779,66 @@ export class DatabaseStorage implements IStorage {
 
   async deleteContract(id: number): Promise<void> {
     await db.delete(contracts).where(eq(contracts.id, id));
+  }
+
+  // Contract Suggestions (auto-detected recurring payments)
+  async getContractSuggestions(status?: "pending" | "accepted" | "dismissed"): Promise<ContractSuggestionWithDetails[]> {
+    let query = db.select().from(contractSuggestions);
+    let suggestions: ContractSuggestion[];
+    
+    if (status) {
+      suggestions = await query.where(eq(contractSuggestions.status, status)).orderBy(desc(contractSuggestions.confidence));
+    } else {
+      suggestions = await query.orderBy(desc(contractSuggestions.confidence));
+    }
+    
+    const cats = await this.getCategories();
+    const accs = await this.getAccounts();
+    const catMap = new Map(cats.map(c => [c.id, c.name]));
+    const accMap = new Map(accs.map(a => [a.id, a.name]));
+    
+    return suggestions.map(s => ({
+      ...s,
+      categoryName: s.categoryId ? catMap.get(s.categoryId) : undefined,
+      accountName: s.accountId ? accMap.get(s.accountId) : undefined
+    }));
+  }
+
+  async getContractSuggestion(id: number): Promise<ContractSuggestion | undefined> {
+    const [suggestion] = await db.select().from(contractSuggestions).where(eq(contractSuggestions.id, id));
+    return suggestion;
+  }
+
+  async createContractSuggestion(suggestion: InsertContractSuggestion): Promise<ContractSuggestion> {
+    const [created] = await db.insert(contractSuggestions).values(suggestion).returning();
+    return created;
+  }
+
+  async updateContractSuggestionStatus(id: number, status: "pending" | "accepted" | "dismissed"): Promise<ContractSuggestion> {
+    const [updated] = await db.update(contractSuggestions).set({ status }).where(eq(contractSuggestions.id, id)).returning();
+    return updated;
+  }
+
+  async clearPendingSuggestions(): Promise<void> {
+    await db.delete(contractSuggestions).where(eq(contractSuggestions.status, "pending"));
+  }
+
+  async acceptSuggestion(id: number): Promise<Contract> {
+    const suggestion = await this.getContractSuggestion(id);
+    if (!suggestion) throw new Error("Vorschlag nicht gefunden");
+    
+    const contract = await this.createContract({
+      name: suggestion.name,
+      description: suggestion.description,
+      amount: suggestion.amount,
+      frequency: suggestion.frequency as "monthly" | "quarterly" | "yearly",
+      type: suggestion.type as "income" | "expense",
+      categoryId: suggestion.categoryId,
+      isActive: true
+    });
+    
+    await this.updateContractSuggestionStatus(id, "accepted");
+    return contract;
   }
 }
 
