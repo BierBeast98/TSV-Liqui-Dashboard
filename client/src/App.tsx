@@ -12,6 +12,7 @@ import EuerReport from "@/pages/EuerReport";
 import Settings from "@/pages/Settings";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
+import Contracts from "@/pages/Contracts";
 import Login from "@/pages/Login";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/categories" component={() => <ProtectedRoute component={Categories} />} />
       <Route path="/events" component={() => <ProtectedRoute component={Events} />} />
       <Route path="/events/:id" component={() => <ProtectedRoute component={EventDetail} />} />
+      <Route path="/contracts" component={() => <ProtectedRoute component={Contracts} />} />
       <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />
       <Route path="/euer" component={() => <ProtectedRoute component={EuerReport} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
