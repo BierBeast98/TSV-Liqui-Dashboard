@@ -71,6 +71,25 @@ function extractContractName(transactions: TransactionResponse[]): string {
   const descriptions = transactions.map(t => t.description);
   const firstDesc = descriptions[0] || "";
   
+  let cleanDesc = firstDesc
+    .replace(/IBAN:\s*[A-Z]{2}\d{2}[A-Z0-9]{4,30}/gi, "")
+    .replace(/BIC:\s*[A-Z0-9]{8,11}/gi, "")
+    .replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/g, "")
+    .replace(/SecureGo\s*plus/gi, "")
+    .replace(/girocard\s*GA\s*\d+\/\d+\/\d+\/\d+\/\d+\/\d+/gi, "")
+    .replace(/Karteninhaber\s+\w+\s+\w+/gi, "")
+    .replace(/MREF:\s*\S+/gi, "")
+    .replace(/EREF:\s*\S+/gi, "")
+    .replace(/CRED:\s*\S+/gi, "")
+    .replace(/\/\*[^*]+\*\//g, "")
+    .replace(/\d{2}\.\d{2}\.\d{4}\/\d{2}:\d{2}/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  
+  if (cleanDesc.length >= 5) {
+    return cleanDesc.substring(0, 60).trim();
+  }
+  
   const sepaMatch = firstDesc.match(/EREF[\+:]?\s*([^\s]+)/i);
   if (sepaMatch) return sepaMatch[1].substring(0, 50);
   
