@@ -184,3 +184,33 @@ export interface EventWithTotals extends Event {
   totalExpenses: number;
   result: number;
 }
+
+// === Contracts (recurring payments/income) ===
+
+export const contracts = pgTable("contracts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  amount: real("amount").notNull(),
+  frequency: text("frequency", { enum: ["monthly", "quarterly", "yearly"] }).notNull(),
+  type: text("type", { enum: ["income", "expense"] }).notNull(),
+  categoryId: integer("category_id").references(() => categories.id),
+  isActive: boolean("is_active").default(true),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  nextDueDate: timestamp("next_due_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContractSchema = createInsertSchema(contracts, {
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  nextDueDate: z.coerce.date().optional(),
+}).omit({ id: true, createdAt: true });
+
+export type Contract = typeof contracts.$inferSelect;
+export type InsertContract = z.infer<typeof insertContractSchema>;
+
+export interface ContractWithCategory extends Contract {
+  categoryName?: string;
+}
