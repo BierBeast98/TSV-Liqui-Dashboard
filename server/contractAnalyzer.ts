@@ -233,8 +233,10 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   const acceptedSuggestions = await storage.getContractSuggestions("accepted");
   const dismissedSuggestions = await storage.getContractSuggestions("dismissed");
   
-  // Create keys for comparison using counterparty + rounded amount
+  // Create keys for comparison using name prefix + rounded amount
   const existingKeys = new Set<string>();
+  // Also track used transaction IDs
+  const usedTransactionIds = new Set<string>();
   
   for (const c of existingContracts) {
     const key = `${c.name.toLowerCase().substring(0, 30)}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
@@ -242,20 +244,36 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   }
   
   for (const s of acceptedSuggestions) {
-    const counterpartyKey = s.counterparty ? s.counterparty.toLowerCase() : s.name.toLowerCase().substring(0, 30);
-    const key = `${counterpartyKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
+    const nameKey = s.name.toLowerCase().substring(0, 30);
+    const key = `${nameKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
     existingKeys.add(key);
+    // Track all transaction IDs from accepted suggestions
+    if (s.sourceTransactionIds) {
+      for (const id of s.sourceTransactionIds) {
+        usedTransactionIds.add(String(id));
+      }
+    }
   }
   
   for (const s of dismissedSuggestions) {
-    const counterpartyKey = s.counterparty ? s.counterparty.toLowerCase() : s.name.toLowerCase().substring(0, 30);
-    const key = `${counterpartyKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
+    const nameKey = s.name.toLowerCase().substring(0, 30);
+    const key = `${nameKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
     existingKeys.add(key);
+    // Track all transaction IDs from dismissed suggestions
+    if (s.sourceTransactionIds) {
+      for (const id of s.sourceTransactionIds) {
+        usedTransactionIds.add(String(id));
+      }
+    }
   }
   
   const newClusters = clusters.filter(c => {
-    const counterpartyKey = c.counterparty ? c.counterparty.toLowerCase() : c.name.toLowerCase().substring(0, 30);
-    const key = `${counterpartyKey}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
+    // Check if any transaction ID overlaps with already accepted/dismissed
+    const hasOverlap = c.transactionIds.some(id => usedTransactionIds.has(id));
+    if (hasOverlap) return false;
+    
+    const nameKey = c.name.toLowerCase().substring(0, 30);
+    const key = `${nameKey}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
     return !existingKeys.has(key);
   });
   
