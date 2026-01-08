@@ -659,12 +659,13 @@ export default function Contracts() {
                         data-testid={`related-transaction-${tx.id}`}
                       >
                         <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className="flex-shrink-0 w-16 text-center">
+                          <div className="flex-shrink-0 w-20 text-center">
                             <p className="text-sm font-medium">{new Date(tx.date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</p>
                             <p className="text-xs text-muted-foreground">{new Date(tx.date).getFullYear()}</p>
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs text-muted-foreground">{tx.account}</p>
+                            <p className="text-sm truncate">{tx.counterparty || "Unbekannt"}</p>
+                            <p className="text-xs text-muted-foreground truncate">{tx.account}</p>
                           </div>
                         </div>
                         <span className={`font-semibold text-sm whitespace-nowrap tabular-nums ${

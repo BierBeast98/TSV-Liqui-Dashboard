@@ -358,6 +358,7 @@ export class DatabaseStorage implements IStorage {
         hash: transactions.hash,
         categoryName: categories.name,
         fiscalArea: categories.fiscalArea,
+        counterparty: transactions.counterparty,
       })
       .from(transactions)
       .leftJoin(categories, eq(transactions.categoryId, categories.id))

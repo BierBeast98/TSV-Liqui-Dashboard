@@ -81,6 +81,7 @@ export interface TransactionWithDetails {
   hash: string | null;
   categoryName: string | null;
   fiscalArea: string | null;
+  counterparty: string | null;
 }
 
 // Query Params
