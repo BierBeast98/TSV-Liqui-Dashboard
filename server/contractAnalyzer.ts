@@ -233,21 +233,29 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   const acceptedSuggestions = await storage.getContractSuggestions("accepted");
   const dismissedSuggestions = await storage.getContractSuggestions("dismissed");
   
-  // Create keys for comparison using name prefix + rounded amount
-  const existingKeys = new Set<string>();
-  // Also track used transaction IDs
+  // Track used transaction IDs
   const usedTransactionIds = new Set<string>();
+  // Track existing amounts (exact match for large amounts > 1000)
+  const existingLargeAmounts = new Set<number>();
+  // Track name:amount combinations
+  const existingKeys = new Set<string>();
   
   for (const c of existingContracts) {
     const key = `${c.name.toLowerCase().substring(0, 30)}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
     existingKeys.add(key);
+    // Track large unique amounts
+    if (Math.abs(c.amount) > 1000) {
+      existingLargeAmounts.add(Math.round(Math.abs(c.amount)));
+    }
   }
   
   for (const s of acceptedSuggestions) {
     const nameKey = s.name.toLowerCase().substring(0, 30);
     const key = `${nameKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
     existingKeys.add(key);
-    // Track all transaction IDs from accepted suggestions
+    if (Math.abs(s.amount) > 1000) {
+      existingLargeAmounts.add(Math.round(Math.abs(s.amount)));
+    }
     if (s.sourceTransactionIds) {
       for (const id of s.sourceTransactionIds) {
         usedTransactionIds.add(String(id));
@@ -259,7 +267,6 @@ export async function analyzeRecurringTransactions(): Promise<void> {
     const nameKey = s.name.toLowerCase().substring(0, 30);
     const key = `${nameKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
     existingKeys.add(key);
-    // Track all transaction IDs from dismissed suggestions
     if (s.sourceTransactionIds) {
       for (const id of s.sourceTransactionIds) {
         usedTransactionIds.add(String(id));
@@ -271,6 +278,12 @@ export async function analyzeRecurringTransactions(): Promise<void> {
     // Check if any transaction ID overlaps with already accepted/dismissed
     const hasOverlap = c.transactionIds.some(id => usedTransactionIds.has(id));
     if (hasOverlap) return false;
+    
+    // Check if this exact large amount already exists as a contract
+    const roundedAmount = Math.round(Math.abs(c.amount));
+    if (roundedAmount > 1000 && existingLargeAmounts.has(roundedAmount)) {
+      return false;
+    }
     
     const nameKey = c.name.toLowerCase().substring(0, 30);
     const key = `${nameKey}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
