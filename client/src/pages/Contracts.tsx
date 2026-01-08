@@ -509,9 +509,9 @@ export default function Contracts() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`font-semibold text-sm whitespace-nowrap ${
-                        suggestion.type === "income" ? "text-green-600 dark:text-green-400" : ""
+                        suggestion.type === "income" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                       }`}>
-                        {suggestion.type === "income" ? "+" : ""}{formatCurrency(Math.abs(suggestion.amount))}
+                        {suggestion.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(suggestion.amount))}
                       </span>
                       <Button 
                         size="icon" 
