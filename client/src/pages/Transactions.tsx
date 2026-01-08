@@ -455,6 +455,9 @@ export default function Transactions() {
               <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('description')}>
                 <div className="flex items-center">Description <SortIcon column="description" /></div>
               </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('counterparty')}>
+                <div className="flex items-center">Zahlungsbeteiligter <SortIcon column="counterparty" /></div>
+              </TableHead>
               <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('account')}>
                 <div className="flex items-center">Konto <SortIcon column="account" /></div>
               </TableHead>
@@ -470,11 +473,11 @@ export default function Transactions() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Loading transactions...</TableCell>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Loading transactions...</TableCell>
               </TableRow>
             ) : sortedTransactions?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                   No transactions found. Try adjusting your filters or add a new one.
                 </TableCell>
               </TableRow>
@@ -489,6 +492,9 @@ export default function Transactions() {
                     {tx.recurring && (
                       <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1.5">Recurring</Badge>
                     )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {tx.counterparty || <span className="italic text-xs">-</span>}
                   </TableCell>
                   <TableCell>
                     {tx.accountName ? (
