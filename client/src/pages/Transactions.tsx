@@ -257,8 +257,8 @@ export default function Transactions() {
     <Layout>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-bold font-display tracking-tight">Transactions</h2>
-          <p className="text-muted-foreground mt-1">Manage and track your financial activity.</p>
+          <h2 className="text-3xl font-bold font-display tracking-tight">Transaktionen</h2>
+          <p className="text-muted-foreground mt-1">Verwalten Sie Ihre Finanzbewegungen.</p>
         </div>
         <div className="flex gap-2">
           <Button 
@@ -285,13 +285,15 @@ export default function Transactions() {
                 <FileUp className="w-4 h-4" /> Import CSV
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Import Transactions</DialogTitle>
-                <DialogDescription>Upload a CSV file from your bank. We'll handle duplicate detection automatically.</DialogDescription>
+                <DialogTitle>Transaktionen importieren</DialogTitle>
+                <DialogDescription>
+                  Laden Sie CSV-Dateien von Ihrer Bank hoch. Duplikate werden automatisch erkannt.
+                </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleUpload} className="space-y-4 pt-4">
-                <div className="grid w-full items-center gap-1.5">
+              <form onSubmit={handleUpload} className="space-y-4">
+                <div className="space-y-2">
                   <label className="text-sm font-medium">CSV-Dateien auswählen (mehrere möglich)</label>
                   <Input 
                     type="file" 
@@ -300,12 +302,12 @@ export default function Transactions() {
                     accept=".csv" 
                     multiple
                     required 
-                    className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" 
+                    className="cursor-pointer" 
                     data-testid="input-csv-files"
                   />
                   <p className="text-xs text-muted-foreground">Das Konto wird automatisch aus der IBAN in der CSV erkannt.</p>
                 </div>
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>Abbrechen</Button>
                   <Button type="submit" disabled={uploadTx.isPending} data-testid="button-import-csv">
                     {uploadTx.isPending ? "Importiere..." : "Importieren"}
@@ -318,12 +320,12 @@ export default function Transactions() {
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2 rounded-xl shadow-lg shadow-primary/20">
-                <Plus className="w-4 h-4" /> Add Transaction
+                <Plus className="w-4 h-4" /> Neue Transaktion
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
-                <DialogTitle>New Transaction</DialogTitle>
+                <DialogTitle>Neue Transaktion</DialogTitle>
               </DialogHeader>
               <TransactionForm 
                 onSubmit={handleCreate} 
@@ -341,7 +343,7 @@ export default function Transactions() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
-              placeholder="Search transactions..." 
+              placeholder="Transaktionen durchsuchen..." 
               className="pl-9 rounded-lg border-border/60 bg-background" 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -362,10 +364,10 @@ export default function Transactions() {
             <Select value={categoryId} onValueChange={setCategoryId}>
               <SelectTrigger className="w-[160px] rounded-lg">
                 <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Category" />
+                <SelectValue placeholder="Kategorie" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="all">Alle Kategorien</SelectItem>
                 {categories?.map((cat) => (
                   <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
                 ))}
@@ -533,13 +535,13 @@ export default function Transactions() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setIsEditOpen(true); }}>
-                          <Pencil className="w-4 h-4 mr-2" /> Edit
+                          <Pencil className="w-4 h-4 mr-2" /> Bearbeiten
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(tx.id)}>
-                          <Trash className="w-4 h-4 mr-2" /> Delete
+                          <Trash className="w-4 h-4 mr-2" /> Löschen
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -555,7 +557,7 @@ export default function Transactions() {
       <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if(!open) setSelectedTx(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Transaction</DialogTitle>
+            <DialogTitle>Transaktion bearbeiten</DialogTitle>
           </DialogHeader>
           {selectedTx && (
             <TransactionForm 
