@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
 interface YearContextType {
   selectedYear: number;
@@ -7,8 +7,17 @@ interface YearContextType {
 
 const YearContext = createContext<YearContextType | null>(null);
 
+const STORAGE_KEY = 'app_selectedYear';
+
 export function YearProvider({ children }: { children: ReactNode }) {
-  const [selectedYear, setSelectedYear] = useState<number>(2025);
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? Number(saved) : new Date().getFullYear();
+  });
+  
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, String(selectedYear));
+  }, [selectedYear]);
   
   return (
     <YearContext.Provider value={{ selectedYear, setSelectedYear }}>

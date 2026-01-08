@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
+import { useYear } from "@/contexts/YearContext";
 import { queryClient } from "@/lib/queryClient";
 import { 
   Table, 
@@ -44,17 +45,32 @@ export default function Transactions() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<any>(null);
   
-  // Filters
-  const [year, setYear] = useState<number>(2024);
-  const [categoryId, setCategoryId] = useState<string>("all");
+  // Year from global context (persisted in localStorage)
+  const { selectedYear: year, setSelectedYear: setYear } = useYear();
+  
+  // Other filters - load from localStorage for persistence across navigation
+  const [categoryId, setCategoryId] = useState<string>(() => {
+    return localStorage.getItem('txFilter_categoryId') || "all";
+  });
   const [accountFilter, setAccountFilter] = useState<string>("all");
-  const [accountId, setAccountId] = useState<string>("all");
+  const [accountId, setAccountId] = useState<string>(() => {
+    return localStorage.getItem('txFilter_accountId') || "all";
+  });
   const [search, setSearch] = useState("");
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // Persist filters to localStorage
+  useEffect(() => {
+    localStorage.setItem('txFilter_categoryId', categoryId);
+  }, [categoryId]);
+  
+  useEffect(() => {
+    localStorage.setItem('txFilter_accountId', accountId);
+  }, [accountId]);
   
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
@@ -73,7 +89,8 @@ export default function Transactions() {
   } as any) as any;
 
   const resetFilters = () => {
-    setYear(2024);
+    const currentYear = new Date().getFullYear();
+    setYear(currentYear);
     setCategoryId("all");
     setAccountFilter("all");
     setAccountId("all");
@@ -82,6 +99,9 @@ export default function Transactions() {
     setMaxAmount("");
     setStartDate("");
     setEndDate("");
+    // Clear persisted filters (year is handled by YearContext)
+    localStorage.setItem('txFilter_categoryId', 'all');
+    localStorage.setItem('txFilter_accountId', 'all');
   };
 
   // Sorting Logic
