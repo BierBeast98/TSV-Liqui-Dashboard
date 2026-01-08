@@ -497,17 +497,47 @@ export class DatabaseStorage implements IStorage {
     const desc = tx.description.toLowerCase();
     
     // Check for internal transfers between own accounts
+    // An internal transfer requires: matching transaction with opposite sign on different account
     const accounts = await this.getAccounts();
     const ownIbans = accounts.map(a => a.iban.toUpperCase());
     const descUpper = tx.description.toUpperCase();
     
-    // Check if description contains one of our own IBANs (indicates transfer between own accounts)
-    const isInternalTransfer = ownIbans.some(iban => descUpper.includes(iban));
+    // Check if description mentions one of our own IBANs
+    const mentionsOwnIban = ownIbans.some(iban => descUpper.includes(iban));
     
-    if (isInternalTransfer) {
-      const transferCat = cats.find(c => c.name === 'Interne Umbuchung');
-      if (transferCat) {
-        return await this.updateTransaction(transactionId, { categoryId: transferCat.id });
+    if (mentionsOwnIban) {
+      // Look for a matching counter-transaction on a different account
+      const txDate = new Date(tx.date);
+      const year = txDate.getFullYear();
+      const allTx = await this.getTransactions({ year });
+      
+      // Find matching transaction: same absolute amount, opposite sign, different account, same date (+/- 2 days)
+      const counterTx = allTx.find(other => {
+        if (other.id === tx.id) return false;
+        if (other.accountId === tx.accountId) return false;
+        
+        // Must have opposite sign and same absolute amount
+        const sameAmount = Math.abs(other.amount) === Math.abs(tx.amount);
+        const oppositeSign = (other.amount > 0 && tx.amount < 0) || (other.amount < 0 && tx.amount > 0);
+        
+        if (!sameAmount || !oppositeSign) return false;
+        
+        // Check if dates are within 2 days of each other
+        const otherDate = new Date(other.date);
+        const daysDiff = Math.abs((txDate.getTime() - otherDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        return daysDiff <= 2;
+      });
+      
+      if (counterTx) {
+        const transferCat = cats.find(c => c.name === 'Interne Umbuchung');
+        if (transferCat) {
+          // Also mark the counter transaction as internal transfer if not already categorized
+          if (!counterTx.categoryId) {
+            await this.updateTransaction(counterTx.id, { categoryId: transferCat.id });
+          }
+          return await this.updateTransaction(transactionId, { categoryId: transferCat.id });
+        }
       }
     }
 
