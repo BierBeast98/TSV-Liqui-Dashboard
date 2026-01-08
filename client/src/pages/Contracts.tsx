@@ -651,23 +651,23 @@ export default function Contracts() {
                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   </div>
                 ) : relatedTransactions && relatedTransactions.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="divide-y">
                     {relatedTransactions.map(tx => (
                       <div 
                         key={tx.id} 
-                        className="flex items-center justify-between gap-4 p-3 rounded-md border bg-background"
+                        className="flex items-center justify-between gap-4 py-3"
                         data-testid={`related-transaction-${tx.id}`}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                          <div className="flex-shrink-0 w-16 text-center">
+                            <p className="text-sm font-medium">{new Date(tx.date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(tx.date).getFullYear()}</p>
+                          </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm truncate">{tx.description}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(tx.date).toLocaleDateString("de-DE")} • {tx.account}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{tx.account}</p>
                           </div>
                         </div>
-                        <span className={`font-semibold text-sm whitespace-nowrap ${
+                        <span className={`font-semibold text-sm whitespace-nowrap tabular-nums ${
                           tx.amount > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                         }`}>
                           {tx.amount > 0 ? "+" : ""}{formatCurrency(tx.amount)}
