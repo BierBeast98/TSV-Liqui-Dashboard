@@ -551,7 +551,7 @@ export class DatabaseStorage implements IStorage {
       "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv", "bayerischer"],
       "Sonstige Ausgaben": ["rückweisung", "rueckweisung", "mahngebühr", "abschluss per", "retoure", "erstattung", "fehlbuchung", "rollengebühr", "grabpflege"],
       "Steuern": ["finanzamt", "steuer", "ust", "kest", "solidaritätszuschlag"],
-      "Büromaterial & Porto": ["porto", "auslage", "büromaterial"],
+      "Büromaterial & Porto": ["porto", "büromaterial"],
       
       // B. Vermögensverwaltung
       "Pachteinnahmen": ["pacht"],
