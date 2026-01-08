@@ -502,10 +502,11 @@ export class DatabaseStorage implements IStorage {
     const ownIbans = accounts.map(a => a.iban.toUpperCase());
     const descUpper = tx.description.toUpperCase();
     
-    // Check if description mentions one of our own IBANs
+    // Check if description mentions one of our own IBANs OR contains "Umbuchung"
     const mentionsOwnIban = ownIbans.some(iban => descUpper.includes(iban));
+    const mentionsUmbuchung = desc.includes('umbuchung');
     
-    if (mentionsOwnIban) {
+    if (mentionsOwnIban || mentionsUmbuchung) {
       // Look for a matching counter-transaction on a different account
       const txDate = new Date(tx.date);
       const year = txDate.getFullYear();
