@@ -199,75 +199,90 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.transactions.upload.path, isAuthenticated, upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).send("No file uploaded");
+  app.post(api.transactions.upload.path, isAuthenticated, upload.array('files', 20), async (req, res) => {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) return res.status(400).send("No files uploaded");
     
     try {
-      const csvContent = req.file.buffer.toString('utf8');
-      
-      const records = parse(csvContent, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        delimiter: ';',
-        relax_column_count: true
-      });
+      let totalImported = 0;
+      let totalDuplicates = 0;
+      const fileResults: { name: string; imported: number; duplicates: number }[] = [];
 
-      if (records.length === 0) return res.json({ imported: 0, duplicates: 0 });
+      for (const file of files) {
+        const csvContent = file.buffer.toString('utf8');
+        
+        const records = parse(csvContent, {
+          columns: true,
+          skip_empty_lines: true,
+          trim: true,
+          delimiter: ';',
+          relax_column_count: true
+        });
 
-      // Identify IBAN column
-      const first = records[0] as Record<string, string>;
-      const ibanKey = Object.keys(first).find(k => {
-        const norm = k.toLowerCase().replace(/[^a-z]/g, '');
-        return norm === 'ibanauftragskonto' || norm === 'auftragskonto' || norm === 'iban';
-      });
+        if (records.length === 0) {
+          fileResults.push({ name: file.originalname, imported: 0, duplicates: 0 });
+          continue;
+        }
 
-      if (!ibanKey) {
-        return res.status(400).json({ message: "Keine IBAN-Spalte (Auftragskonto) in der CSV gefunden." });
+        // Identify IBAN column
+        const first = records[0] as Record<string, string>;
+        const ibanKey = Object.keys(first).find(k => {
+          const norm = k.toLowerCase().replace(/[^a-z]/g, '');
+          return norm === 'ibanauftragskonto' || norm === 'auftragskonto' || norm === 'iban';
+        });
+
+        if (!ibanKey) {
+          fileResults.push({ name: file.originalname, imported: 0, duplicates: 0 });
+          continue;
+        }
+
+        const iban = first[ibanKey];
+        const account = await storage.getOrCreateAccount(iban);
+
+        const toImport: InsertTransaction[] = records.map((r: any) => {
+          const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
+          const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
+          const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
+          const counterpartyStr = r['Name Zahlungsbeteiligter'] || r['Zahlungsbeteiligter'] || r['Empfänger'] || r['Auftraggeber'] || '';
+          
+          if (!dateStr || !amountStr) return null;
+
+          let date: Date;
+          if (typeof dateStr === 'string' && dateStr.includes('.')) {
+            const [day, month, year] = dateStr.split('.');
+            date = new Date(`${year}-${month}-${day}`);
+          } else {
+            date = new Date(dateStr);
+          }
+
+          let amount = 0;
+          if (typeof amountStr === 'string') {
+            amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
+          } else {
+            amount = Number(amountStr);
+          }
+          
+          const counterparty = counterpartyStr ? String(counterpartyStr).trim() : null;
+
+          return {
+            date: date,
+            amount: amount,
+            description: String(descStr || "No description"),
+            counterparty: counterparty || undefined,
+            accountId: account.id,
+            account: account.name,
+            hash: "",
+            recurring: false
+          } as InsertTransaction;
+        }).filter((r): r is InsertTransaction => r !== null && !isNaN(r.amount));
+
+        const result = await storage.createTransactionsBulk(toImport);
+        totalImported += result.imported;
+        totalDuplicates += result.duplicates;
+        fileResults.push({ name: file.originalname, imported: result.imported, duplicates: result.duplicates });
       }
 
-      const iban = first[ibanKey];
-      const account = await storage.getOrCreateAccount(iban);
-
-      const toImport: InsertTransaction[] = records.map((r: any) => {
-        const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
-        const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
-        const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
-        const counterpartyStr = r['Name Zahlungsbeteiligter'] || r['Zahlungsbeteiligter'] || r['Empfänger'] || r['Auftraggeber'] || '';
-        
-        if (!dateStr || !amountStr) return null;
-
-        let date: Date;
-        if (typeof dateStr === 'string' && dateStr.includes('.')) {
-          const [day, month, year] = dateStr.split('.');
-          date = new Date(`${year}-${month}-${day}`);
-        } else {
-          date = new Date(dateStr);
-        }
-
-        let amount = 0;
-        if (typeof amountStr === 'string') {
-          amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'));
-        } else {
-          amount = Number(amountStr);
-        }
-        
-        const counterparty = counterpartyStr ? String(counterpartyStr).trim() : null;
-
-        return {
-          date: date,
-          amount: amount,
-          description: String(descStr || "No description"),
-          counterparty: counterparty || undefined,
-          accountId: account.id,
-          account: account.name, // Legacy support
-          hash: "",
-          recurring: false
-        } as InsertTransaction;
-      }).filter((r): r is InsertTransaction => r !== null && !isNaN(r.amount));
-
-      const result = await storage.createTransactionsBulk(toImport);
-      res.json(result);
+      res.json({ imported: totalImported, duplicates: totalDuplicates, files: fileResults });
     } catch (e) {
       console.error(e);
       res.status(400).json({ message: "Failed to parse CSV" });

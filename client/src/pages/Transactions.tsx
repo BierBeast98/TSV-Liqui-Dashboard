@@ -225,16 +225,30 @@ export default function Transactions() {
 
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    const files = fileInput?.files;
+    
+    if (!files || files.length === 0) {
+      toast({ title: "Keine Dateien", description: "Bitte wählen Sie mindestens eine CSV-Datei aus.", variant: "destructive" });
+      return;
+    }
+    
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+    
     try {
       const result = await uploadTx.mutateAsync(formData);
+      const fileCount = files.length;
       toast({ 
-        title: "Import Complete", 
-        description: `Imported ${result.imported} transactions to ${formData.get('account')}. ${result.duplicates} duplicates skipped.` 
+        title: "Import abgeschlossen", 
+        description: `${fileCount} Datei${fileCount > 1 ? 'en' : ''}: ${result.imported} Buchungen importiert, ${result.duplicates} Duplikate übersprungen.` 
       });
       setIsUploadOpen(false);
     } catch (error: any) {
-      toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+      toast({ title: "Upload fehlgeschlagen", description: error.message, variant: "destructive" });
     }
   };
 
@@ -276,33 +290,24 @@ export default function Transactions() {
                 <DialogDescription>Upload a CSV file from your bank. We'll handle duplicate detection automatically.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleUpload} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Ziel-Konto</label>
-                  <Select name="account" defaultValue="Hauptkonto" required>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Wähle ein Konto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Hauptkonto">Hauptkonto</SelectItem>
-                      <SelectItem value="Sparkonto">Sparkonto</SelectItem>
-                      <SelectItem value="Handkasse">Handkasse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="grid w-full items-center gap-1.5">
+                  <label className="text-sm font-medium">CSV-Dateien auswählen (mehrere möglich)</label>
                   <Input 
                     type="file" 
-                    name="file" 
+                    name="files" 
                     id="csv-upload"
                     accept=".csv" 
+                    multiple
                     required 
                     className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" 
+                    data-testid="input-csv-files"
                   />
+                  <p className="text-xs text-muted-foreground">Das Konto wird automatisch aus der IBAN in der CSV erkannt.</p>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
-                  <Button type="submit" disabled={uploadTx.isPending}>
-                    {uploadTx.isPending ? "Importing..." : "Import"}
+                  <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>Abbrechen</Button>
+                  <Button type="submit" disabled={uploadTx.isPending} data-testid="button-import-csv">
+                    {uploadTx.isPending ? "Importiere..." : "Importieren"}
                   </Button>
                 </div>
               </form>
