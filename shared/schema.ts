@@ -70,6 +70,19 @@ export type TransactionResponse = Transaction & {
   accountName?: string;
 };
 
+export interface TransactionWithDetails {
+  id: number;
+  date: Date;
+  description: string;
+  amount: number;
+  account: string | null;
+  accountId: number | null;
+  categoryId: number | null;
+  hash: string | null;
+  categoryName: string | null;
+  fiscalArea: string | null;
+}
+
 // Query Params
 export interface TransactionQueryParams {
   year?: number;

@@ -132,6 +132,16 @@ export async function registerRoutes(
     res.json(txs);
   });
 
+  app.get("/api/transactions/by-ids", isAuthenticated, async (req, res) => {
+    const ids = req.query.ids;
+    if (!ids || typeof ids !== "string") {
+      return res.status(400).json({ message: "ids parameter required" });
+    }
+    const idList = ids.split(",").map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    const txs = await storage.getTransactionsByIds(idList);
+    res.json(txs);
+  });
+
   app.post(api.transactions.create.path, isAuthenticated, async (req, res) => {
     try {
       const input = api.transactions.create.input.parse(req.body);

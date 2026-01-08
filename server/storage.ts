@@ -4,7 +4,7 @@ import {
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
-  type Account, type TransactionResponse,
+  type Account, type TransactionResponse, type TransactionWithDetails,
   type AccountBalance, type InsertAccountBalance,
   type EuerReport, type InsertEuerReport,
   type EuerLineItem, type InsertEuerLineItem,
@@ -13,7 +13,7 @@ import {
   type Contract, type InsertContract, type ContractWithCategory,
   type ContractSuggestion, type InsertContractSuggestion, type ContractSuggestionWithDetails
 } from "@shared/schema";
-import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage extends IAuthStorage {
@@ -342,6 +342,28 @@ export class DatabaseStorage implements IStorage {
   async getTransaction(id: number): Promise<Transaction | undefined> {
     const [tx] = await db.select().from(transactions).where(eq(transactions.id, id));
     return tx;
+  }
+
+  async getTransactionsByIds(ids: number[]): Promise<TransactionWithDetails[]> {
+    if (ids.length === 0) return [];
+    const result = await db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        description: transactions.description,
+        amount: transactions.amount,
+        account: transactions.account,
+        accountId: transactions.accountId,
+        categoryId: transactions.categoryId,
+        hash: transactions.hash,
+        categoryName: categories.name,
+        fiscalArea: categories.fiscalArea,
+      })
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .where(inArray(transactions.id, ids))
+      .orderBy(desc(transactions.date));
+    return result;
   }
 
   async createTransaction(transaction: InsertTransaction): Promise<Transaction> {

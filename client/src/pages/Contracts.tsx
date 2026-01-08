@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power, Sparkles, Check, X, RefreshCw } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power, Sparkles, Check, X, RefreshCw, Calendar, Receipt } from "lucide-react";
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
-import type { ContractWithCategory, Category, ContractSuggestionWithDetails } from "@shared/schema";
+import type { ContractWithCategory, Category, ContractSuggestionWithDetails, TransactionWithDetails } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 type Frequency = "monthly" | "quarterly" | "yearly";
@@ -53,6 +54,8 @@ export default function Contracts() {
   const [showInactive, setShowInactive] = useState(false);
   const [formData, setFormData] = useState<ContractFormData>(emptyFormData);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<ContractSuggestionWithDetails | null>(null);
+  const [isTransactionsDialogOpen, setIsTransactionsDialogOpen] = useState(false);
 
   const { data: contracts, isLoading } = useQuery<ContractWithCategory[]>({
     queryKey: ["/api/contracts", showInactive],
@@ -143,6 +146,23 @@ export default function Contracts() {
       toast({ title: "Vorschlag abgelehnt" });
     }
   });
+
+  const relatedTransactionIds = selectedSuggestion?.sourceTransactionIds?.join(",") || "";
+  const { data: relatedTransactions, isLoading: relatedLoading } = useQuery<TransactionWithDetails[]>({
+    queryKey: ["/api/transactions/by-ids", relatedTransactionIds],
+    queryFn: async () => {
+      if (!relatedTransactionIds) return [];
+      const res = await fetch(`/api/transactions/by-ids?ids=${relatedTransactionIds}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
+    enabled: !!relatedTransactionIds && isTransactionsDialogOpen
+  });
+
+  const handleSuggestionClick = (suggestion: ContractSuggestionWithDetails) => {
+    setSelectedSuggestion(suggestion);
+    setIsTransactionsDialogOpen(true);
+  };
 
   const handleSubmit = () => {
     if (!formData.name || !formData.amount) return;
@@ -484,8 +504,9 @@ export default function Contracts() {
                 {suggestions.map(suggestion => (
                   <div 
                     key={suggestion.id} 
-                    className="flex items-center justify-between gap-4 p-3 rounded-md bg-background border"
+                    className="flex items-center justify-between gap-4 p-3 rounded-md bg-background border cursor-pointer hover-elevate"
                     data-testid={`suggestion-${suggestion.id}`}
+                    onClick={() => handleSuggestionClick(suggestion)}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
@@ -516,7 +537,7 @@ export default function Contracts() {
                       <Button 
                         size="icon" 
                         variant="ghost"
-                        onClick={() => acceptSuggestionMutation.mutate(suggestion.id)}
+                        onClick={(e) => { e.stopPropagation(); acceptSuggestionMutation.mutate(suggestion.id); }}
                         disabled={acceptSuggestionMutation.isPending}
                         title="Als Vertrag übernehmen"
                         data-testid={`button-accept-suggestion-${suggestion.id}`}
@@ -526,7 +547,7 @@ export default function Contracts() {
                       <Button 
                         size="icon" 
                         variant="ghost"
-                        onClick={() => dismissSuggestionMutation.mutate(suggestion.id)}
+                        onClick={(e) => { e.stopPropagation(); dismissSuggestionMutation.mutate(suggestion.id); }}
                         disabled={dismissSuggestionMutation.isPending}
                         title="Ablehnen"
                         data-testid={`button-dismiss-suggestion-${suggestion.id}`}
@@ -595,6 +616,94 @@ export default function Contracts() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={isTransactionsDialogOpen} onOpenChange={setIsTransactionsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5" />
+              Zugehörige Buchungen
+            </DialogTitle>
+          </DialogHeader>
+          {selectedSuggestion && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50">
+                <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
+                  selectedSuggestion.type === "income" ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
+                }`}>
+                  {selectedSuggestion.type === "income" ? (
+                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium">{selectedSuggestion.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {frequencyLabels[selectedSuggestion.frequency as Frequency]} • {selectedSuggestion.sourceTransactionIds?.length || 0} Buchungen
+                  </p>
+                </div>
+              </div>
+
+              <ScrollArea className="h-[400px]">
+                {relatedLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : relatedTransactions && relatedTransactions.length > 0 ? (
+                  <div className="space-y-2">
+                    {relatedTransactions.map(tx => (
+                      <div 
+                        key={tx.id} 
+                        className="flex items-center justify-between gap-4 p-3 rounded-md border bg-background"
+                        data-testid={`related-transaction-${tx.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm truncate">{tx.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(tx.date).toLocaleDateString("de-DE")} • {tx.account}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`font-semibold text-sm whitespace-nowrap ${
+                          tx.amount > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                        }`}>
+                          {tx.amount > 0 ? "+" : ""}{formatCurrency(tx.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Keine Buchungen gefunden
+                  </p>
+                )}
+              </ScrollArea>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsTransactionsDialogOpen(false)}
+                >
+                  Schließen
+                </Button>
+                <Button
+                  onClick={() => {
+                    acceptSuggestionMutation.mutate(selectedSuggestion.id);
+                    setIsTransactionsDialogOpen(false);
+                  }}
+                  disabled={acceptSuggestionMutation.isPending}
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Als Vertrag übernehmen
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
