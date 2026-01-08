@@ -230,15 +230,34 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   }
   
   const existingContracts = await storage.getContracts(true);
-  const existingNames = new Set(existingContracts.map(c => c.name.toLowerCase()));
-  
+  const acceptedSuggestions = await storage.getContractSuggestions("accepted");
   const dismissedSuggestions = await storage.getContractSuggestions("dismissed");
-  const dismissedNames = new Set(dismissedSuggestions.map(s => s.name.toLowerCase()));
   
-  const newClusters = clusters.filter(c => 
-    !existingNames.has(c.name.toLowerCase()) && 
-    !dismissedNames.has(c.name.toLowerCase())
-  );
+  // Create keys for comparison using counterparty + rounded amount
+  const existingKeys = new Set<string>();
+  
+  for (const c of existingContracts) {
+    const key = `${c.name.toLowerCase().substring(0, 30)}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
+    existingKeys.add(key);
+  }
+  
+  for (const s of acceptedSuggestions) {
+    const counterpartyKey = s.counterparty ? s.counterparty.toLowerCase() : s.name.toLowerCase().substring(0, 30);
+    const key = `${counterpartyKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
+    existingKeys.add(key);
+  }
+  
+  for (const s of dismissedSuggestions) {
+    const counterpartyKey = s.counterparty ? s.counterparty.toLowerCase() : s.name.toLowerCase().substring(0, 30);
+    const key = `${counterpartyKey}:${Math.round(Math.abs(s.amount) / 5) * 5}`;
+    existingKeys.add(key);
+  }
+  
+  const newClusters = clusters.filter(c => {
+    const counterpartyKey = c.counterparty ? c.counterparty.toLowerCase() : c.name.toLowerCase().substring(0, 30);
+    const key = `${counterpartyKey}:${Math.round(Math.abs(c.amount) / 5) * 5}`;
+    return !existingKeys.has(key);
+  });
   
   for (const cluster of newClusters) {
     const suggestion: InsertContractSuggestion = {
