@@ -352,10 +352,10 @@ export default function Transactions() {
           <div className="flex gap-2 flex-wrap">
             <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
               <SelectTrigger className="w-[100px] rounded-lg">
-                <SelectValue placeholder="Year" />
+                <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
-                {[2023, 2024, 2025].map(y => (
+                {[2023, 2024, 2025, 2026].map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
@@ -394,7 +394,7 @@ export default function Transactions() {
               onClick={() => setShowAdvanced(!showAdvanced)}
             >
               <Filter className="w-4 h-4" />
-              {showAdvanced ? "Hide Advanced" : "Advanced"}
+              {showAdvanced ? "Weniger" : "Erweitert"}
             </Button>
 
             <Button 
@@ -458,10 +458,10 @@ export default function Transactions() {
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('date')}>
-                <div className="flex items-center">Date <SortIcon column="date" /></div>
+                <div className="flex items-center">Datum <SortIcon column="date" /></div>
               </TableHead>
               <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('description')}>
-                <div className="flex items-center">Description <SortIcon column="description" /></div>
+                <div className="flex items-center">Beschreibung <SortIcon column="description" /></div>
               </TableHead>
               <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('counterparty')}>
                 <div className="flex items-center">Zahlungsbeteiligter <SortIcon column="counterparty" /></div>
@@ -470,10 +470,10 @@ export default function Transactions() {
                 <div className="flex items-center">Konto <SortIcon column="account" /></div>
               </TableHead>
               <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('category')}>
-                <div className="flex items-center">Category <SortIcon column="category" /></div>
+                <div className="flex items-center">Kategorie <SortIcon column="category" /></div>
               </TableHead>
               <TableHead className="text-right cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('amount')}>
-                <div className="flex items-center justify-end">Amount <SortIcon column="amount" /></div>
+                <div className="flex items-center justify-end">Betrag <SortIcon column="amount" /></div>
               </TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -481,12 +481,12 @@ export default function Transactions() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Loading transactions...</TableCell>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Transaktionen werden geladen...</TableCell>
               </TableRow>
             ) : sortedTransactions?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                  No transactions found. Try adjusting your filters or add a new one.
+                  Keine Transaktionen gefunden. Passen Sie die Filter an oder wählen Sie ein anderes Jahr.
                 </TableCell>
               </TableRow>
             ) : (
@@ -498,7 +498,7 @@ export default function Transactions() {
                   <TableCell className="font-medium">
                     {tx.description}
                     {tx.recurring && (
-                      <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1.5">Recurring</Badge>
+                      <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1.5">Wiederkehrend</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
@@ -521,7 +521,7 @@ export default function Transactions() {
                         {tx.categoryName}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground italic text-xs">Uncategorized</span>
+                      <span className="text-muted-foreground italic text-xs">Nicht kategorisiert</span>
                     )}
                   </TableCell>
                   <TableCell className={`text-right font-bold ${tx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
