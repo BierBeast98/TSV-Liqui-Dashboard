@@ -562,7 +562,7 @@ export class DatabaseStorage implements IStorage {
       // C. Zweckbetriebe
       "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
       "Veranstaltungen (Ausgaben)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
-      "Übungsleiter": ["übungsleiter", "uebungsleiter", "übungsleiter-tätigkeit", "uel"],
+      "Übungsleiter": ["übungsleiter", "uebungsleiter", "übungsleiter-tätigkeit", "uel", "ül-vergütung", "ul-vergütung"],
       "Ehrenamtspauschale": ["ehrenamtspauschale", "ehrenamt"],
       "Aufwandsentschädigung": ["aufwandsentschädigung", "aufwand", "auslagen"],
       "Trainer & Schiedsrichter": ["trainer", "schiedsrichter", "lohn"],
