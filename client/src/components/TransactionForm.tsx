@@ -18,7 +18,7 @@ import { insertTransactionSchema } from "@shared/schema";
 import { Loader2 } from "lucide-react";
 
 const formSchema = insertTransactionSchema.extend({
-  amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
+  amount: z.coerce.number().refine(val => val !== 0, "Betrag darf nicht 0 sein"),
   categoryId: z.coerce.number().optional(),
   date: z.coerce.date(),
   account: z.string().min(1, "Account name is required"),
