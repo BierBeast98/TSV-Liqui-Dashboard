@@ -544,37 +544,42 @@ export class DatabaseStorage implements IStorage {
 
     const mapping: Record<string, string[]> = {
       // A. Ideeller Bereich
-      "Mitgliedsbeiträge": ["beitrag", "mitglied", "jahresbeitrag", "mitgliedschaft"],
+      "Mitgliedsbeiträge": ["sepa sammel", "mitglied", "jahresbeitrag", "mitgliedschaft"],
+      "Abteilungsbeiträge": ["skiclub", "abteilung"],
       "Spenden": ["spende", "zuwendung", "stiftung", "geldspende"],
-      "Zuschüsse": ["zuschuss", "förderung", "beihilfe", "kommunal"],
+      "Zuschüsse": ["zuschuss", "förderung", "beihilfe", "kommunal", "vereinspauschale", "sportförderung", "kostenbeteiligung"],
       "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv", "bayerischer"],
-      "Bankgebühren": ["abschluss per", "zinsen", "gebühr", "entgelt", "kontoführung", "karte", "abschluss"],
-      "Steuern": ["finanzamt", "steuer", "ust", "kest"],
-      "Sonstige Ausgaben": ["rückweisung", "rueckweisung", "mahngebühr"],
+      "Sonstige Ausgaben": ["rückweisung", "rueckweisung", "mahngebühr", "abschluss per", "retoure", "erstattung", "fehlbuchung", "rollengebühr", "grabpflege"],
+      "Steuern": ["finanzamt", "steuer", "ust", "kest", "solidaritätszuschlag"],
+      "Büromaterial & Porto": ["porto", "auslage", "büromaterial"],
       
       // B. Vermögensverwaltung
-      "Pachteinnahmen": ["pacht", "miete eingang"],
-      "Platz & Gebäude": ["n-ergie", "energie", "heizung", "grundsteuer", "reinigung", "hausmeister", "müll"],
-      "Strom & Energie": ["strom", "gas", "fernwärme"],
-      "Versicherungen": ["versicherung", "arag", "vdek", "allianz", "signal", "haftpflicht"],
+      "Pachteinnahmen": ["pacht"],
+      "Platz & Gebäude": ["turnhalle", "sporthalle", "halle", "grundsteuer", "reinigung", "hausmeister", "müll"],
+      "Strom & Energie": ["n-ergie", "strom", "gas", "fernwärme", "abschlag", "energie"],
+      "Versicherungen": ["versicherung", "arag", "vdek", "allianz", "signal", "haftpflicht", "zurich"],
       "Reparaturen": ["reparatur", "instandhaltung", "wartung"],
+      "Zinserträge": ["zinsgutschrift", "zinsertrag"],
+      "Darlehenszinsen": ["zinsaufwand", "darlehenszins"],
       
       // C. Zweckbetriebe
-      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
-      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest"],
-      "Übungsleiter": ["übungsleiter", "uebungsleiter", "übungsleiter-tätigkeit", "uel", "ül-vergütung", "ul-vergütung"],
+      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest", "stadtmeisterschaft", "sommerfest", "cup"],
+      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier ausgaben"],
+      "Eintrittsgelder": ["sportplatzeinnahmen", "eintritt"],
+      "Spielerablöse": ["spielerwechsel", "ablöse", "abloese"],
+      "Übungsleiter": ["übungsleiter", "uebungsleiter", "ül-vergütung", "ul-vergütung", "ul-vergutung"],
       "Ehrenamtspauschale": ["ehrenamtspauschale", "ehrenamt"],
-      "Aufwandsentschädigung": ["aufwandsentschädigung", "aufwand", "auslagen"],
-      "Trainer & Schiedsrichter": ["trainer", "schiedsrichter", "lohn"],
-      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug", "sport", "ball", "trikot"],
-      "Sportkleidung": ["trikot", "dress", "sportbekleidung", "kleidung"],
+      "Aufwandsentschädigung": ["aufwandsentschädigung"],
+      "Trainer & Schiedsrichter": ["trainerlohn", "schiedsrichter"],
+      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug"],
+      "Sportkleidung": ["trikot", "dress", "sportbekleidung", "bekleidung"],
       "Platzpflege": ["platzpflege", "rasen", "mäher", "dünger"],
-      "Teilnehmergebühren": ["teilnehmer", "kurs", "training"],
+      "Teilnehmergebühren": ["teilnehmer", "kurs"],
       
       // D. Wirtschaftlicher Geschäftsbetrieb
-      "Sponsoring": ["sponsoring", "sponsor", "werbung"],
+      "Sponsoring": ["sponsoring", "sponsor"],
       "Bandenwerbung": ["bande", "bandenwerbung"],
-      "Bewirtung": ["bewirtung", "getränke", "speisen", "catering"],
+      "Bewirtung": ["bewirtung", "speisen", "catering", "girocard"],
       "Wareneinkauf": ["einkauf", "waren", "getränkehandel", "brauerei"],
     };
 
