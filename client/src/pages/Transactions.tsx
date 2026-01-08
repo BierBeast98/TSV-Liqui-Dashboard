@@ -164,6 +164,7 @@ export default function Transactions() {
       console.log("UI: Requesting deletion of all transactions");
       const response = await fetch("/api/transactions/all", { 
         method: "DELETE",
+        credentials: "include",
         headers: {
           'Accept': 'application/json'
         }
