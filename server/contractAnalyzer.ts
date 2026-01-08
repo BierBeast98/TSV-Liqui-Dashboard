@@ -154,19 +154,41 @@ export async function analyzeRecurringTransactions(): Promise<void> {
   for (const tx of nonTransfers) {
     const type = tx.amount >= 0 ? "income" : "expense";
     const roundedAmount = Math.round(Math.abs(tx.amount) / 5) * 5;
+    const counterpartyKey = tx.counterparty ? tx.counterparty.toLowerCase().trim() : "";
     
     let foundBucket = false;
     const bucketEntries = Array.from(buckets.entries());
-    for (const [key, existingTxs] of bucketEntries) {
-      if (!key.startsWith(`${type}:${tx.accountId}:`)) continue;
-      const existingAmount = parseFloat(key.split(":")[2]);
-      if (Math.abs(existingAmount - roundedAmount) > existingAmount * 0.05) continue;
-      
-      const similarity = calculateSimilarity(tx.description, existingTxs[0].description);
-      if (similarity >= 0.5) {
-        existingTxs.push(tx);
-        foundBucket = true;
-        break;
+    
+    // First try to match by counterparty (for yearly recurring like Bandenwerbung)
+    if (counterpartyKey) {
+      for (const [key, existingTxs] of bucketEntries) {
+        if (!key.startsWith(`${type}:${tx.accountId}:`)) continue;
+        const existingCounterparty = existingTxs[0].counterparty?.toLowerCase().trim() || "";
+        if (existingCounterparty && existingCounterparty === counterpartyKey) {
+          // Same counterparty, allow up to 10% amount variance
+          const existingAmount = parseFloat(key.split(":")[2]);
+          if (Math.abs(existingAmount - roundedAmount) <= existingAmount * 0.1) {
+            existingTxs.push(tx);
+            foundBucket = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    // If not matched by counterparty, try description similarity
+    if (!foundBucket) {
+      for (const [key, existingTxs] of bucketEntries) {
+        if (!key.startsWith(`${type}:${tx.accountId}:`)) continue;
+        const existingAmount = parseFloat(key.split(":")[2]);
+        if (Math.abs(existingAmount - roundedAmount) > existingAmount * 0.05) continue;
+        
+        const similarity = calculateSimilarity(tx.description, existingTxs[0].description);
+        if (similarity >= 0.5) {
+          existingTxs.push(tx);
+          foundBucket = true;
+          break;
+        }
       }
     }
     
