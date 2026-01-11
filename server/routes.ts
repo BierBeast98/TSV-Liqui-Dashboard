@@ -209,6 +209,25 @@ export async function registerRoutes(
     }
   });
 
+  // Bulk update transactions (category, etc.)
+  app.patch("/api/transactions/bulk", isAuthenticated, async (req, res) => {
+    try {
+      const { ids, updates } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Keine Buchungen ausgewählt" });
+      }
+      if (!updates || typeof updates !== 'object') {
+        return res.status(400).json({ message: "Keine Änderungen angegeben" });
+      }
+      
+      const updatedCount = await storage.bulkUpdateTransactions(ids, updates);
+      res.json({ updatedCount });
+    } catch (e) {
+      console.error("Bulk update error:", e);
+      res.status(500).json({ message: e instanceof Error ? e.message : "Fehler bei Sammelbearbeitung" });
+    }
+  });
+
   app.post(api.transactions.upload.path, isAuthenticated, upload.array('files', 20), async (req, res) => {
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) return res.status(400).send("No files uploaded");

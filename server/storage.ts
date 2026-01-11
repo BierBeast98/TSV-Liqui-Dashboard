@@ -52,6 +52,7 @@ export interface IStorage extends IAuthStorage {
   updateTransaction(id: number, updates: UpdateTransactionRequest): Promise<Transaction>;
   deleteTransaction(id: number): Promise<void>;
   createTransactionsBulk(transactionsData: InsertTransaction[]): Promise<{ imported: number, duplicates: number }>;
+  bulkUpdateTransactions(ids: number[], updates: Partial<UpdateTransactionRequest>): Promise<number>;
   
   // Stats
   getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]>;
@@ -402,6 +403,15 @@ export class DatabaseStorage implements IStorage {
       imported++;
     }
     return { imported, duplicates };
+  }
+
+  async bulkUpdateTransactions(ids: number[], updates: Partial<UpdateTransactionRequest>): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.update(transactions)
+      .set(updates)
+      .where(inArray(transactions.id, ids))
+      .returning({ id: transactions.id });
+    return result.length;
   }
 
   async getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]> {
