@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power, Sparkles, Check, X, RefreshCw, Calendar, Receipt } from "lucide-react";
+import { Plus, Trash2, Loader2, FileText, Pencil, TrendingUp, TrendingDown, Power, Sparkles, Check, X, RefreshCw, Calendar, Receipt, Link2 } from "lucide-react";
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import type { ContractWithCategory, Category, ContractSuggestionWithDetails, TransactionWithDetails } from "@shared/schema";
@@ -103,6 +103,30 @@ export default function Contracts() {
   });
 
   const { toast } = useToast();
+
+  const linkTransactionsMutation = useMutation({
+    mutationFn: async (contractId: number) => {
+      const res = await apiRequest("POST", `/api/contracts/${contractId}/link-transactions`, {});
+      return res.json();
+    },
+    onSuccess: (data: { linkedCount: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      if (data.linkedCount > 0) {
+        toast({ 
+          title: "Buchungen verknüpft", 
+          description: `${data.linkedCount} Buchung(en) wurden mit dem Vertrag verknüpft.` 
+        });
+      } else {
+        toast({ 
+          title: "Keine passenden Buchungen", 
+          description: "Es wurden keine unverknüpften Buchungen mit passendem Betrag gefunden." 
+        });
+      }
+    },
+    onError: () => {
+      toast({ title: "Fehler", description: "Verknüpfung fehlgeschlagen.", variant: "destructive" });
+    }
+  });
 
   const { data: suggestions, isLoading: suggestionsLoading } = useQuery<ContractSuggestionWithDetails[]>({
     queryKey: ["/api/contracts/suggestions", "pending"],
@@ -306,6 +330,16 @@ export default function Contracts() {
                       data-testid={`button-toggle-contract-${contract.id}`}
                     >
                       <Power className={`w-4 h-4 ${contract.isActive ? "text-green-500" : "text-muted-foreground"}`} />
+                    </Button>
+                    <Button 
+                      size="icon" 
+                      variant="ghost"
+                      onClick={() => linkTransactionsMutation.mutate(contract.id)}
+                      disabled={linkTransactionsMutation.isPending}
+                      title="Passende Buchungen verknüpfen"
+                      data-testid={`button-link-transactions-${contract.id}`}
+                    >
+                      <Link2 className="w-4 h-4 text-primary" />
                     </Button>
                     <Button 
                       size="icon" 

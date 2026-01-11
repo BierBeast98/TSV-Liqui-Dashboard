@@ -893,6 +893,68 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // Link matching transactions to a contract (based on amount AND counterparty similarity)
+  app.post("/api/contracts/:id/link-transactions", isAuthenticated, async (req, res) => {
+    try {
+      const contractId = Number(req.params.id);
+      const contract = await storage.getContract(contractId);
+      if (!contract) {
+        return res.status(404).json({ error: "Vertrag nicht gefunden" });
+      }
+      
+      // Find transactions already linked to this contract to get counterparty pattern
+      const allTx = await storage.getTransactions({});
+      const linkedTx = allTx.filter(tx => tx.contractId === contractId);
+      
+      // Extract counterparty patterns from already linked transactions, or use contract name
+      const counterpartyPatterns: string[] = linkedTx
+        .map(tx => tx.counterparty?.toLowerCase().trim())
+        .filter((c): c is string => !!c);
+      
+      // Use contract name as fallback pattern
+      const contractNameLower = contract.name.toLowerCase().trim();
+      
+      // Find matching transactions:
+      // 1. Same amount (within tolerance)
+      // 2. Not already linked to any contract
+      // 3. Counterparty matches an existing pattern OR description contains contract name
+      const matchingTx = allTx.filter(tx => {
+        if (tx.contractId) return false; // Already linked
+        if (Math.abs(tx.amount - contract.amount) > 0.01) return false; // Amount mismatch
+        
+        const txCounterparty = tx.counterparty?.toLowerCase().trim() || "";
+        const txDescription = tx.description?.toLowerCase().trim() || "";
+        
+        // Check if counterparty matches existing patterns
+        if (counterpartyPatterns.length > 0) {
+          return counterpartyPatterns.some(pattern => 
+            txCounterparty === pattern || 
+            txCounterparty.includes(pattern) || 
+            pattern.includes(txCounterparty)
+          );
+        }
+        
+        // Fallback: check if description or counterparty contains contract name keywords
+        const nameWords = contractNameLower.split(/\s+/).filter(w => w.length > 3);
+        return nameWords.some(word => 
+          txCounterparty.includes(word) || txDescription.includes(word)
+        );
+      });
+      
+      // Link each matching transaction
+      let linkedCount = 0;
+      for (const tx of matchingTx) {
+        await storage.updateTransaction(tx.id, { contractId });
+        linkedCount++;
+      }
+      
+      res.json({ linkedCount, contractId });
+    } catch (error) {
+      console.error("Link transactions error:", error);
+      res.status(500).json({ error: "Fehler beim Verknüpfen der Buchungen" });
+    }
+  });
+
   // === AI Assistant ===
   app.post("/api/assistant", isAuthenticated, async (req, res) => {
     let aborted = false;
