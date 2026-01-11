@@ -54,6 +54,8 @@ export interface IStorage extends IAuthStorage {
   createTransactionsBulk(transactionsData: InsertTransaction[]): Promise<{ imported: number, duplicates: number }>;
   bulkUpdateTransactions(ids: number[], updates: Partial<UpdateTransactionRequest>): Promise<number>;
   getTransactionsByCounterparty(counterparty: string): Promise<TransactionResponse[]>;
+  linkTransactionToContract(transactionId: number, contractId: number): Promise<Transaction>;
+  unlinkTransactionFromContract(transactionId: number): Promise<Transaction>;
   
   // Stats
   getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]>;
@@ -284,25 +286,30 @@ export class DatabaseStorage implements IStorage {
     endDate?: string;
     minAmount?: number;
     maxAmount?: number;
+    hasContract?: boolean;
   }): Promise<TransactionResponse[]> {
     let query = db.select({
       id: transactions.id,
       date: transactions.date,
       amount: transactions.amount,
       description: transactions.description,
+      counterparty: transactions.counterparty,
       categoryId: transactions.categoryId,
       accountId: transactions.accountId,
+      contractId: transactions.contractId,
       account: transactions.account,
       recurring: transactions.recurring,
       hash: transactions.hash,
       createdAt: transactions.createdAt,
       categoryName: categories.name,
       categoryType: categories.type,
-      accountName: accounts.name
+      accountName: accounts.name,
+      contractName: contracts.name,
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(accounts, eq(transactions.accountId, accounts.id));
+    .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(contracts, eq(transactions.contractId, contracts.id));
 
     const filters = [];
 
@@ -333,12 +340,33 @@ export class DatabaseStorage implements IStorage {
     if (params?.maxAmount !== undefined) {
       filters.push(sql`ABS(${transactions.amount}) <= ${params.maxAmount}`);
     }
+    if (params?.hasContract === true) {
+      filters.push(sql`${transactions.contractId} IS NOT NULL`);
+    } else if (params?.hasContract === false) {
+      filters.push(sql`${transactions.contractId} IS NULL`);
+    }
     
     if (filters.length > 0) {
       query.where(and(...filters));
     }
     
     return await query.orderBy(desc(transactions.date)) as TransactionResponse[];
+  }
+
+  async linkTransactionToContract(transactionId: number, contractId: number): Promise<Transaction> {
+    const [tx] = await db.update(transactions)
+      .set({ contractId })
+      .where(eq(transactions.id, transactionId))
+      .returning();
+    return tx;
+  }
+
+  async unlinkTransactionFromContract(transactionId: number): Promise<Transaction> {
+    const [tx] = await db.update(transactions)
+      .set({ contractId: null })
+      .where(eq(transactions.id, transactionId))
+      .returning();
+    return tx;
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -875,6 +903,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteContract(id: number): Promise<void> {
+    // First, unlink all transactions that reference this contract
+    await db.update(transactions)
+      .set({ contractId: null })
+      .where(eq(transactions.contractId, id));
+    // Then delete the contract
     await db.delete(contracts).where(eq(contracts.id, id));
   }
 

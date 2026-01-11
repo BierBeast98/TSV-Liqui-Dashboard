@@ -39,6 +39,7 @@ export const transactions = pgTable("transactions", {
   counterparty: text("counterparty"), // Name Zahlungsbeteiligter from CSV
   categoryId: integer("category_id").references(() => categories.id),
   accountId: integer("account_id").references(() => accounts.id),
+  contractId: integer("contract_id"), // Link to associated contract (FK added later to avoid circular ref)
   account: text("account").default("Hauptkonto"), // Legacy field
   recurring: boolean("recurring").default(false),
   hash: text("hash").unique(), // For duplicate detection: hash(date + amount + description)
@@ -68,6 +69,7 @@ export type TransactionResponse = Transaction & {
   categoryName?: string; 
   categoryType?: string;
   accountName?: string;
+  contractName?: string; // Name of linked contract, if any
 };
 
 export interface TransactionWithDetails {

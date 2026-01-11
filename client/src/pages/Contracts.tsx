@@ -168,6 +168,7 @@ export default function Contracts() {
     if (!formData.name || !formData.amount) return;
     const parsedAmount = parseFloat(formData.amount.replace(",", "."));
     const signedAmount = formData.type === "expense" ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+    const categoryIdValue = formData.categoryId && formData.categoryId !== "none" ? parseInt(formData.categoryId) : null;
     
     if (editingId) {
       updateMutation.mutate({ 
@@ -178,7 +179,7 @@ export default function Contracts() {
           amount: signedAmount,
           frequency: formData.frequency,
           type: formData.type,
-          categoryId: formData.categoryId ? parseInt(formData.categoryId) : null
+          categoryId: categoryIdValue
         }
       });
     } else {
@@ -188,7 +189,7 @@ export default function Contracts() {
         amount: signedAmount,
         frequency: formData.frequency,
         type: formData.type,
-        categoryId: formData.categoryId ? parseInt(formData.categoryId) : null
+        categoryId: categoryIdValue
       });
     }
   };
@@ -444,7 +445,7 @@ export default function Contracts() {
                           <SelectValue placeholder="Auswählen..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Keine Kategorie</SelectItem>
+                          <SelectItem value="none">Keine Kategorie</SelectItem>
                           {categories?.filter(c => c.type === formData.type).map(cat => (
                             <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
                           ))}

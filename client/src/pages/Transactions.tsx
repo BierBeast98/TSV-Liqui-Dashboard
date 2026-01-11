@@ -175,20 +175,29 @@ export default function Transactions() {
     }
   }, [relatedData?.detectedFrequency]);
 
-  // Create contract mutation
+  // Create contract mutation with transaction linking
   const createContractMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/contracts", data);
-      return res.json();
+    mutationFn: async (data: { contract: any; sourceTransactionId: number }) => {
+      // Create the contract first
+      const res = await apiRequest("POST", "/api/contracts", data.contract);
+      const newContract = await res.json();
+      
+      // Link the source transaction to this contract
+      await apiRequest("PATCH", `/api/transactions/${data.sourceTransactionId}`, {
+        contractId: newContract.id
+      });
+      
+      return newContract;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       setIsContractDialogOpen(false);
       setContractTx(null);
       setSelectedFrequency("");
       toast({ 
         title: "Vertrag erstellt", 
-        description: "Der Vertrag wurde erfolgreich angelegt." 
+        description: "Der Vertrag wurde erfolgreich angelegt und mit der Buchung verknüpft." 
       });
     },
     onError: (error: Error) => {
@@ -210,7 +219,10 @@ export default function Transactions() {
       startDate: new Date(contractTx.date).toISOString(),
     };
     
-    createContractMutation.mutate(contractData);
+    createContractMutation.mutate({ 
+      contract: contractData, 
+      sourceTransactionId: contractTx.id 
+    });
   };
 
   const openContractDialog = (tx: any) => {
@@ -701,7 +713,13 @@ export default function Transactions() {
                   </TableCell>
                   <TableCell className="font-medium">
                     {tx.description}
-                    {tx.recurring && (
+                    {tx.contractName && (
+                      <Badge variant="outline" className="ml-2 text-[10px] h-5 px-1.5 border-primary/50 text-primary">
+                        <FileText className="w-3 h-3 mr-1" />
+                        Vertrag
+                      </Badge>
+                    )}
+                    {tx.recurring && !tx.contractId && (
                       <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1.5">Wiederkehrend</Badge>
                     )}
                   </TableCell>
