@@ -34,7 +34,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TransactionForm } from "@/components/TransactionForm";
-import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, Tags, X } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, Tags, X, FileText, CalendarDays } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +47,11 @@ export default function Transactions() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<any>(null);
+  
+  // Contract creation dialog state
+  const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
+  const [contractTx, setContractTx] = useState<any>(null);
+  const [selectedFrequency, setSelectedFrequency] = useState<string>("");
   
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -144,6 +151,73 @@ export default function Transactions() {
   const uploadTx = useUploadTransactions();
   const autoCat = useAutoCategorize();
   const { toast } = useToast();
+
+  // Related transactions query for contract creation
+  const { data: relatedData, isLoading: isLoadingRelated } = useQuery<{
+    transaction: any;
+    relatedTransactions: any[];
+    detectedFrequency: "monthly" | "quarterly" | "yearly" | null;
+    intervals: { from: string; to: string; days: number }[];
+  }>({
+    queryKey: ["/api/transactions", contractTx?.id, "related"],
+    queryFn: async () => {
+      const res = await fetch(`/api/transactions/${contractTx.id}/related`);
+      if (!res.ok) throw new Error("Fehler beim Laden");
+      return res.json();
+    },
+    enabled: !!contractTx?.id && isContractDialogOpen,
+  });
+
+  // Set detected frequency when data loads
+  useEffect(() => {
+    if (relatedData?.detectedFrequency && !selectedFrequency) {
+      setSelectedFrequency(relatedData.detectedFrequency);
+    }
+  }, [relatedData?.detectedFrequency]);
+
+  // Create contract mutation
+  const createContractMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/contracts", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+      setIsContractDialogOpen(false);
+      setContractTx(null);
+      setSelectedFrequency("");
+      toast({ 
+        title: "Vertrag erstellt", 
+        description: "Der Vertrag wurde erfolgreich angelegt." 
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const handleCreateContract = () => {
+    if (!contractTx || !selectedFrequency) return;
+    
+    const contractData = {
+      name: contractTx.counterparty || contractTx.description?.substring(0, 50) || "Neuer Vertrag",
+      description: contractTx.description,
+      amount: Math.abs(contractTx.amount),
+      frequency: selectedFrequency,
+      type: contractTx.amount < 0 ? "expense" : "income",
+      categoryId: contractTx.categoryId || null,
+      isActive: true,
+      startDate: new Date(contractTx.date).toISOString(),
+    };
+    
+    createContractMutation.mutate(contractData);
+  };
+
+  const openContractDialog = (tx: any) => {
+    setContractTx(tx);
+    setSelectedFrequency("");
+    setIsContractDialogOpen(true);
+  };
 
   // Bulk update mutation
   const bulkUpdateMutation = useMutation({
@@ -669,6 +743,9 @@ export default function Transactions() {
                         <DropdownMenuItem onClick={() => { setSelectedTx(tx); setIsEditOpen(true); }}>
                           <Pencil className="w-4 h-4 mr-2" /> Bearbeiten
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openContractDialog(tx)}>
+                          <FileText className="w-4 h-4 mr-2" /> Als Vertrag markieren
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDelete(tx.id)}>
                           <Trash className="w-4 h-4 mr-2" /> Löschen
@@ -696,6 +773,133 @@ export default function Transactions() {
               isSubmitting={updateTx.isPending} 
               onCancel={() => setIsEditOpen(false)} 
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Contract Creation Dialog */}
+      <Dialog open={isContractDialogOpen} onOpenChange={(open) => { 
+        setIsContractDialogOpen(open); 
+        if(!open) { setContractTx(null); setSelectedFrequency(""); }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Als Vertrag markieren
+            </DialogTitle>
+            <DialogDescription>
+              Erstellen Sie einen wiederkehrenden Vertrag basierend auf dieser Buchung.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {contractTx && (
+            <div className="space-y-6 flex-1 overflow-hidden flex flex-col">
+              {/* Selected Transaction */}
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm font-medium text-muted-foreground mb-2">Ausgewählte Buchung</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{contractTx.counterparty || contractTx.description?.substring(0, 40)}</p>
+                    <p className="text-sm text-muted-foreground">{format(new Date(contractTx.date), "dd.MM.yyyy")}</p>
+                  </div>
+                  <p className={`text-lg font-bold ${contractTx.amount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatCurrency(contractTx.amount)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Related Transactions */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">
+                    Weitere Buchungen von {contractTx.counterparty || "diesem Zahlungspartner"}
+                  </p>
+                  {relatedData?.detectedFrequency && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      <CalendarDays className="w-3 h-3 mr-1" />
+                      {relatedData.detectedFrequency === "monthly" ? "Monatlich erkannt" :
+                       relatedData.detectedFrequency === "quarterly" ? "Quartalsweise erkannt" :
+                       relatedData.detectedFrequency === "yearly" ? "Jährlich erkannt" : ""}
+                    </Badge>
+                  )}
+                </div>
+                
+                {isLoadingRelated ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    Lade verwandte Buchungen...
+                  </div>
+                ) : relatedData?.relatedTransactions && relatedData.relatedTransactions.length > 1 ? (
+                  <ScrollArea className="flex-1 border rounded-lg">
+                    <div className="p-2 space-y-1">
+                      {relatedData.relatedTransactions.map((rtx: any, idx: number) => (
+                        <div key={rtx.id}>
+                          <div className={`flex items-center justify-between p-2 rounded ${rtx.id === contractTx.id ? 'bg-primary/10' : 'hover:bg-muted/50'}`}>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs text-muted-foreground font-mono w-20">
+                                {format(new Date(rtx.date), "dd.MM.yyyy")}
+                              </span>
+                              <span className="text-sm truncate max-w-[200px]">{rtx.description?.substring(0, 40)}</span>
+                            </div>
+                            <span className={`font-medium ${rtx.amount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {formatCurrency(rtx.amount)}
+                            </span>
+                          </div>
+                          {idx < relatedData.relatedTransactions.length - 1 && relatedData.intervals[idx] && (
+                            <div className="text-xs text-center text-muted-foreground py-1">
+                              <span className="bg-muted px-2 py-0.5 rounded">
+                                {relatedData.intervals[idx].days} Tage
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground border rounded-lg">
+                    Keine weiteren Buchungen mit demselben Zahlungspartner gefunden.
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Frequency Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Zahlungsrhythmus</label>
+                <Select value={selectedFrequency} onValueChange={setSelectedFrequency}>
+                  <SelectTrigger data-testid="select-frequency">
+                    <SelectValue placeholder="Rhythmus auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monatlich</SelectItem>
+                    <SelectItem value="quarterly">Quartalsweise</SelectItem>
+                    <SelectItem value="yearly">Jährlich</SelectItem>
+                  </SelectContent>
+                </Select>
+                {relatedData?.detectedFrequency && selectedFrequency !== relatedData.detectedFrequency && (
+                  <p className="text-xs text-muted-foreground">
+                    Automatisch erkannt: {relatedData.detectedFrequency === "monthly" ? "Monatlich" :
+                                         relatedData.detectedFrequency === "quarterly" ? "Quartalsweise" : "Jährlich"}
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setIsContractDialogOpen(false)}>
+                  Abbrechen
+                </Button>
+                <Button 
+                  onClick={handleCreateContract}
+                  disabled={!selectedFrequency || createContractMutation.isPending}
+                  data-testid="button-create-contract"
+                >
+                  {createContractMutation.isPending ? "Wird erstellt..." : "Vertrag erstellen"}
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

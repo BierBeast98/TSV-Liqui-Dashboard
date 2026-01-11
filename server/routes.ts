@@ -233,6 +233,76 @@ export async function registerRoutes(
     }
   });
 
+  // Find related transactions by counterparty for contract creation
+  app.get("/api/transactions/:id/related", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Ungültige Buchungs-ID" });
+      }
+
+      const tx = await storage.getTransaction(id);
+      if (!tx) {
+        return res.status(404).json({ message: "Buchung nicht gefunden" });
+      }
+
+      if (!tx.counterparty || !tx.counterparty.trim()) {
+        return res.json({
+          transaction: tx,
+          relatedTransactions: [],
+          detectedFrequency: null,
+          intervals: []
+        });
+      }
+
+      const related = await storage.getTransactionsByCounterparty(tx.counterparty);
+      
+      // Sort by date ascending for interval calculation AND for response
+      const sortedRelated = [...related].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      
+      const intervals: { from: string; to: string; days: number }[] = [];
+      for (let i = 1; i < sortedRelated.length; i++) {
+        const fromDate = new Date(sortedRelated[i - 1].date);
+        const toDate = new Date(sortedRelated[i].date);
+        const days = Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+        intervals.push({
+          from: fromDate.toISOString().split('T')[0],
+          to: toDate.toISOString().split('T')[0],
+          days
+        });
+      }
+
+      // Detect frequency based on intervals
+      let detectedFrequency: "monthly" | "quarterly" | "yearly" | null = null;
+      if (intervals.length > 0) {
+        const medianDays = intervals
+          .map(i => i.days)
+          .sort((a, b) => a - b)[Math.floor(intervals.length / 2)];
+        
+        if (medianDays >= 26 && medianDays <= 35 && intervals.length >= 3) {
+          detectedFrequency = "monthly";
+        } else if (medianDays >= 80 && medianDays <= 110 && intervals.length >= 2) {
+          detectedFrequency = "quarterly";
+        } else if (medianDays >= 330 && medianDays <= 400 && intervals.length >= 1) {
+          detectedFrequency = "yearly";
+        }
+      }
+
+      // Return sorted list so intervals align with displayed transactions
+      res.json({
+        transaction: tx,
+        relatedTransactions: sortedRelated,
+        detectedFrequency,
+        intervals
+      });
+    } catch (e) {
+      console.error("Related transactions error:", e);
+      res.status(500).json({ message: e instanceof Error ? e.message : "Fehler beim Laden" });
+    }
+  });
+
   app.post(api.transactions.upload.path, isAuthenticated, upload.array('files', 20), async (req, res) => {
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) return res.status(400).send("No files uploaded");

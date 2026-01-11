@@ -53,6 +53,7 @@ export interface IStorage extends IAuthStorage {
   deleteTransaction(id: number): Promise<void>;
   createTransactionsBulk(transactionsData: InsertTransaction[]): Promise<{ imported: number, duplicates: number }>;
   bulkUpdateTransactions(ids: number[], updates: Partial<UpdateTransactionRequest>): Promise<number>;
+  getTransactionsByCounterparty(counterparty: string): Promise<TransactionResponse[]>;
   
   // Stats
   getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]>;
@@ -412,6 +413,33 @@ export class DatabaseStorage implements IStorage {
       .where(inArray(transactions.id, ids))
       .returning({ id: transactions.id });
     return result.length;
+  }
+
+  async getTransactionsByCounterparty(counterparty: string): Promise<TransactionResponse[]> {
+    if (!counterparty || !counterparty.trim()) return [];
+    const result = await db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        description: transactions.description,
+        amount: transactions.amount,
+        account: transactions.account,
+        accountId: transactions.accountId,
+        categoryId: transactions.categoryId,
+        counterparty: transactions.counterparty,
+        recurring: transactions.recurring,
+        hash: transactions.hash,
+        createdAt: transactions.createdAt,
+        categoryName: categories.name,
+        categoryType: categories.type,
+        accountName: accounts.name,
+      })
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+      .where(eq(transactions.counterparty, counterparty.trim()))
+      .orderBy(desc(transactions.date));
+    return result as TransactionResponse[];
   }
 
   async getMonthlyStats(year: number, account?: string): Promise<{ month: string, income: number, expenses: number }[]> {

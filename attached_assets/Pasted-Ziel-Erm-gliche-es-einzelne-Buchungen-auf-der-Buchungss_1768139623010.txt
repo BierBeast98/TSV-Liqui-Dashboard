@@ -1,0 +1,30 @@
+Ziel:
+Ermögliche es, einzelne Buchungen auf der Buchungsseite als Vertrag zu kennzeichnen und diese automatisch auf der Vertragsseite hinzuzufügen. Zusätzlich soll der Nutzer bei der Vertragsanlage weitere relevante Buchungen derselben IBAN sehen, um wiederkehrende Zahlungsrhythmen zu erkennen.
+
+Funktionale Anforderungen:
+	•	Auf der Buchungsseite muss es möglich sein, eine einzelne Buchung als „Vertrag“ zu markieren (z. B. per Button oder Kontextaktion).
+	•	Sobald eine Buchung als Vertrag gekennzeichnet wird, muss sie automatisch auf der Vertragsseite erscheinen.
+	•	Beim Markieren als Vertrag sollen weitere Buchungen mit derselben IBAN ermittelt und angezeigt werden.
+	•	Diese zusätzlichen Buchungen dienen ausschließlich der Analyse und Erkennung eines Zahlungsrhythmus (z. B. monatlich, quartalsweise, jährlich).
+
+UI/UX-Anforderungen:
+	•	Die Aktion „Als Vertrag markieren“ soll klar sichtbar und eindeutig sein.
+	•	Nach Auswahl soll sich ein Dialog / Overlay öffnen, der:
+	•	die ausgewählte Buchung anzeigt
+	•	weitere Buchungen mit identischer IBAN übersichtlich darstellt (Datum, Betrag, Abstand)
+	•	Der erkannte Rhythmus soll visuell hervorgehoben oder vorgeschlagen werden (z. B. „monatlich erkannt“).
+	•	Der Nutzer kann den vorgeschlagenen Rhythmus bestätigen oder manuell anpassen.
+
+Technische Anforderungen:
+	•	Verwende die bestehende Buchungs- und Vertragsdatenstruktur.
+	•	Die IBAN-basierte Suche muss performant und zuverlässig sein.
+	•	Die Rhythmuserkennung soll auf Zeitabständen zwischen Buchungen basieren und robust gegenüber Ausreißern sein.
+	•	Die Lösung soll erweiterbar sein (z. B. spätere Erkennung nach Betrag + IBAN).
+
+Qualitätssicherung:
+	•	Stelle sicher, dass nur die explizit ausgewählte Buchung als Vertrag angelegt wird.
+	•	Zusätzliche Buchungen dürfen nicht automatisch zu Verträgen werden.
+	•	Prüfe Edge Cases (z. B. nur eine Buchung vorhanden, unregelmäßige Abstände).
+
+Ergebnis:
+Nutzer können Buchungen gezielt als Verträge anlegen und erhalten dabei eine intelligente Unterstützung zur Erkennung wiederkehrender Zahlungen.
