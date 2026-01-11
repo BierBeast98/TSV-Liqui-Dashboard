@@ -197,6 +197,20 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // PATCH single transaction (partial update, e.g. contractId)
+  app.patch("/api/transactions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const updates = req.body;
+      const tx = await storage.updateTransaction(id, updates);
+      if (!tx) return res.status(404).send("Not found");
+      res.json(tx);
+    } catch (e) {
+      console.error("PATCH transaction error:", e);
+      res.status(500).json({ message: e instanceof Error ? e.message : "Update failed" });
+    }
+  });
+
   app.delete("/api/transactions/all", isAuthenticated, async (req, res) => {
     try {
       console.log("DELETE ALL: Request received");
