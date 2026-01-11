@@ -140,7 +140,7 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
       )}
 
       {isOpen && (
-        <Card className="fixed bottom-4 right-4 w-96 h-[500px] flex flex-col shadow-xl z-50 overflow-hidden">
+        <Card className="fixed bottom-4 right-4 left-4 sm:left-auto w-auto sm:w-96 h-[60vh] sm:h-[500px] flex flex-col shadow-xl z-50 overflow-hidden">
           <div className="flex items-center justify-between gap-2 p-3 border-b bg-primary text-primary-foreground">
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5" />

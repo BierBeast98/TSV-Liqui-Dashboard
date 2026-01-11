@@ -61,19 +61,20 @@ export default function Events() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Veranstaltungen</h2>
-            <p className="text-muted-foreground mt-1">Einnahmen und Ausgaben bei Festen und Events tracken</p>
+            <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Veranstaltungen</h2>
+            <p className="text-muted-foreground text-sm mt-1">Einnahmen und Ausgaben bei Festen und Events tracken</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-create-event">
-                <Plus className="w-4 h-4 mr-2" />
-                Neue Veranstaltung
+              <Button size="sm" data-testid="button-create-event">
+                <Plus className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">Neue Veranstaltung</span>
+                <span className="sm:hidden">Neu</span>
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="w-[95vw] sm:w-auto sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Neue Veranstaltung erstellen</DialogTitle>
               </DialogHeader>

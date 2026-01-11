@@ -410,37 +410,40 @@ export default function Transactions() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-3xl font-bold font-display tracking-tight">Transaktionen</h2>
-          <p className="text-muted-foreground mt-1">Verwalten Sie Ihre Finanzbewegungen.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2 rounded-xl text-primary border-primary/20 hover:bg-primary/5"
-            onClick={handleAutoCategorize}
-            disabled={autoCat.isPending}
-          >
-            <Sparkles className={`w-4 h-4 ${autoCat.isPending ? 'animate-spin' : ''}`} />
-            Automatisch kategorisieren
-          </Button>
-          <Button 
-            type="button"
-            variant="outline" 
-            className="gap-2 rounded-xl text-destructive border-destructive/20 hover:bg-destructive/5"
-            onClick={(e) => handleDeleteAll(e)}
-          >
-            <Trash className="w-4 h-4" />
-            Alle löschen
-          </Button>
-          <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2 rounded-xl">
-                <FileUp className="w-4 h-4" /> Import CSV
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+      <div className="flex flex-col gap-4 mb-6 md:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight">Transaktionen</h2>
+            <p className="text-muted-foreground text-sm mt-1">Verwalten Sie Ihre Finanzbewegungen.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-1 rounded-xl text-primary border-primary/20 hover:bg-primary/5"
+              onClick={handleAutoCategorize}
+              disabled={autoCat.isPending}
+            >
+              <Sparkles className={`w-4 h-4 ${autoCat.isPending ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Auto-Kategorie</span>
+            </Button>
+            <Button 
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1 rounded-xl text-destructive border-destructive/20 hover:bg-destructive/5"
+              onClick={(e) => handleDeleteAll(e)}
+            >
+              <Trash className="w-4 h-4" />
+              <span className="hidden sm:inline">Alle löschen</span>
+            </Button>
+            <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1 rounded-xl">
+                  <FileUp className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Transaktionen importieren</DialogTitle>
                 <DialogDescription>
@@ -474,11 +477,11 @@ export default function Transactions() {
 
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 rounded-xl shadow-lg shadow-primary/20">
-                <Plus className="w-4 h-4" /> Neue Transaktion
+              <Button size="sm" className="gap-1 rounded-xl shadow-lg shadow-primary/20">
+                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Neu</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg w-[95vw] sm:w-auto">
               <DialogHeader>
                 <DialogTitle>Neue Transaktion</DialogTitle>
               </DialogHeader>
@@ -490,23 +493,24 @@ export default function Transactions() {
             </DialogContent>
           </Dialog>
         </div>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-4 mb-6 bg-card p-4 rounded-xl border border-border/60 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
+      {/* Filters - Responsive */}
+      <div className="flex flex-col gap-4 mb-6 bg-card p-3 md:p-4 rounded-xl border border-border/60 shadow-sm">
+        <div className="flex flex-col gap-3">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
-              placeholder="Transaktionen durchsuchen..." 
-              className="pl-9 rounded-lg border-border/60 bg-background" 
+              placeholder="Suchen..." 
+              className="pl-9 rounded-lg border-border/60 bg-background h-10" 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger className="w-[100px] rounded-lg">
+              <SelectTrigger className="rounded-lg h-10">
                 <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
@@ -517,8 +521,7 @@ export default function Transactions() {
             </Select>
 
             <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="w-[160px] rounded-lg">
-                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectTrigger className="rounded-lg h-10">
                 <SelectValue placeholder="Kategorie" />
               </SelectTrigger>
               <SelectContent>
@@ -530,36 +533,36 @@ export default function Transactions() {
             </Select>
 
             <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger className="w-[160px] rounded-lg">
-                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectTrigger className="rounded-lg h-10">
                 <SelectValue placeholder="Konto" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Konten</SelectItem>
                 {accounts?.map((acc) => (
-                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name} ({acc.iban})</SelectItem>
+                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="rounded-lg gap-2"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Filter className="w-4 h-4" />
-              {showAdvanced ? "Weniger" : "Erweitert"}
-            </Button>
-
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="rounded-lg text-muted-foreground hover:text-foreground"
-              onClick={resetFilters}
-            >
-              Reset
-            </Button>
+            <div className="flex gap-1">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="rounded-lg h-10 flex-1 px-2"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                <Filter className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1">{showAdvanced ? "Weniger" : "Mehr"}</span>
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="rounded-lg h-10 px-2"
+                onClick={resetFilters}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -607,9 +610,9 @@ export default function Transactions() {
         )}
       </div>
 
-      {/* Bulk Action Bar - Only shown when items are selected */}
+      {/* Bulk Action Bar - Responsive */}
       {hasSelection && (
-        <div className="flex items-center gap-4 p-4 mb-4 bg-primary/5 border border-primary/20 rounded-xl" data-testid="bulk-action-bar">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 md:p-4 mb-4 bg-primary/5 border border-primary/20 rounded-xl" data-testid="bulk-action-bar">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-sm">
               {selectedIds.size} ausgewählt
@@ -624,10 +627,10 @@ export default function Transactions() {
               <X className="w-4 h-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-2 flex-1">
-            <Tags className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+            <Tags className="w-4 h-4 text-muted-foreground hidden sm:block" />
             <Select value={bulkCategoryId} onValueChange={setBulkCategoryId}>
-              <SelectTrigger className="w-[200px]" data-testid="select-bulk-category">
+              <SelectTrigger className="flex-1 sm:w-[200px]" data-testid="select-bulk-category">
                 <SelectValue placeholder="Kategorie wählen..." />
               </SelectTrigger>
               <SelectContent>
@@ -641,19 +644,20 @@ export default function Transactions() {
               onClick={handleBulkCategoryChange}
               disabled={!bulkCategoryId || bulkUpdateMutation.isPending}
               data-testid="button-apply-bulk-category"
+              className="whitespace-nowrap"
             >
-              {bulkUpdateMutation.isPending ? "Wird angewendet..." : "Kategorie anwenden"}
+              {bulkUpdateMutation.isPending ? "..." : "Anwenden"}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Table */}
-      <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-        <Table>
+      {/* Table - Desktop with horizontal scroll on mobile */}
+      <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-x-auto">
+        <Table className="min-w-[800px]">
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-[50px]">
+              <TableHead className="w-[40px] sticky left-0 bg-muted/50 z-10">
                 <Checkbox 
                   checked={allSelected ? true : someSelected ? "indeterminate" : false}
                   onCheckedChange={toggleSelectAll}
@@ -661,25 +665,25 @@ export default function Transactions() {
                   data-testid="checkbox-select-all"
                 />
               </TableHead>
-              <TableHead className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('date')}>
-                <div className="flex items-center">Datum <SortIcon column="date" /></div>
+              <TableHead className="w-[100px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('date')}>
+                <div className="flex items-center text-xs">Datum <SortIcon column="date" /></div>
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('description')}>
-                <div className="flex items-center">Beschreibung <SortIcon column="description" /></div>
+              <TableHead className="min-w-[150px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('description')}>
+                <div className="flex items-center text-xs">Beschreibung <SortIcon column="description" /></div>
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('counterparty')}>
-                <div className="flex items-center">Zahlungsbeteiligter <SortIcon column="counterparty" /></div>
+              <TableHead className="min-w-[150px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('counterparty')}>
+                <div className="flex items-center text-xs">Zahlungsbeteiligter <SortIcon column="counterparty" /></div>
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('account')}>
-                <div className="flex items-center">Konto <SortIcon column="account" /></div>
+              <TableHead className="min-w-[100px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('account')}>
+                <div className="flex items-center text-xs">Konto <SortIcon column="account" /></div>
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('category')}>
-                <div className="flex items-center">Kategorie <SortIcon column="category" /></div>
+              <TableHead className="min-w-[120px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('category')}>
+                <div className="flex items-center text-xs">Kategorie <SortIcon column="category" /></div>
               </TableHead>
-              <TableHead className="text-right cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('amount')}>
-                <div className="flex items-center justify-end">Betrag <SortIcon column="amount" /></div>
+              <TableHead className="w-[100px] text-right cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('amount')}>
+                <div className="flex items-center justify-end text-xs">Betrag <SortIcon column="amount" /></div>
               </TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[40px] sticky right-0 bg-muted/50 z-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -700,7 +704,7 @@ export default function Transactions() {
                   className={`group transition-colors ${selectedIds.has(tx.id) ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`}
                   data-testid={`transaction-row-${tx.id}`}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell onClick={(e) => e.stopPropagation()} className="sticky left-0 bg-card z-10">
                     <Checkbox 
                       checked={selectedIds.has(tx.id)}
                       onCheckedChange={() => toggleSelectOne(tx.id)}
@@ -708,51 +712,53 @@ export default function Transactions() {
                       data-testid={`checkbox-transaction-${tx.id}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium font-mono text-xs text-muted-foreground">
-                    {format(new Date(tx.date), "MMM d, yyyy")}
+                  <TableCell className="font-medium font-mono text-xs text-muted-foreground whitespace-nowrap">
+                    {format(new Date(tx.date), "dd.MM.yy")}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {tx.description}
-                    {tx.contractName && (
-                      <Badge variant="outline" className="ml-2 text-[10px] h-5 px-1.5 border-primary/50 text-primary">
-                        <FileText className="w-3 h-3 mr-1" />
-                        Vertrag
-                      </Badge>
-                    )}
-                    {tx.recurring && !tx.contractId && (
-                      <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1.5">Wiederkehrend</Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="truncate max-w-[200px]">{tx.description}</span>
+                      {tx.contractName && (
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-primary/50 text-primary shrink-0">
+                          <FileText className="w-3 h-3 mr-1" />
+                          Vertrag
+                        </Badge>
+                      )}
+                      {tx.recurring && !tx.contractId && (
+                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">Wiederkehrend</Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {tx.counterparty || <span className="italic text-xs">-</span>}
+                    <span className="truncate max-w-[150px] block">{tx.counterparty || "-"}</span>
                   </TableCell>
                   <TableCell>
                     {tx.accountName ? (
-                      <Badge variant="secondary" className="font-normal bg-muted/50">
+                      <Badge variant="secondary" className="font-normal bg-muted/50 text-xs">
                         {tx.accountName}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="font-normal bg-muted/50">
+                      <Badge variant="secondary" className="font-normal bg-muted/50 text-xs">
                         {tx.account || "Hauptkonto"}
                       </Badge>
                     )}
                   </TableCell>
                   <TableCell>
                     {tx.categoryName ? (
-                      <Badge variant="outline" className="font-normal bg-background/50">
+                      <Badge variant="outline" className="font-normal bg-background/50 text-xs">
                         {tx.categoryName}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground italic text-xs">Nicht kategorisiert</span>
+                      <span className="text-muted-foreground italic text-xs">-</span>
                     )}
                   </TableCell>
-                  <TableCell className={`text-right font-bold ${tx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                  <TableCell className={`text-right font-bold whitespace-nowrap ${tx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
                     {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="sticky right-0 bg-card z-10">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>

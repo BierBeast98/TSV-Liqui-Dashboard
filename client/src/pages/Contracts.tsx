@@ -296,68 +296,74 @@ export default function Contracts() {
               className={`hover-elevate ${!contract.isActive ? 'opacity-60' : ''}`}
               data-testid={`card-contract-${contract.id}`}
             >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-4">
+              <CardContent className="p-3 md:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
+                    <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-md flex items-center justify-center ${
                       contract.type === "income" ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
                     }`}>
                       {contract.type === "income" ? (
-                        <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-green-600 dark:text-green-400" />
                       ) : (
-                        <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        <TrendingDown className="w-4 h-4 md:w-5 md:h-5 text-red-600 dark:text-red-400" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{contract.name}</p>
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className="font-medium truncate text-sm md:text-base">{contract.name}</p>
+                      <p className="text-xs md:text-sm text-muted-foreground truncate">
                         {contract.categoryName || contract.description || "Ohne Kategorie"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-semibold whitespace-nowrap ${
+                  <div className="flex items-center justify-between sm:justify-end gap-2">
+                    <span className={`font-semibold whitespace-nowrap text-sm md:text-base ${
                       contract.type === "income" ? "text-green-600 dark:text-green-400" : ""
                     }`}>
                       {contract.type === "income" ? "+" : ""}{formatCurrency(Math.abs(contract.amount))}
                     </span>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => handleToggleActive(contract)}
-                      disabled={updateMutation.isPending}
-                      title={contract.isActive ? "Deaktivieren" : "Aktivieren"}
-                      data-testid={`button-toggle-contract-${contract.id}`}
-                    >
-                      <Power className={`w-4 h-4 ${contract.isActive ? "text-green-500" : "text-muted-foreground"}`} />
-                    </Button>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => linkTransactionsMutation.mutate(contract.id)}
-                      disabled={linkTransactionsMutation.isPending}
-                      title="Passende Buchungen verknüpfen"
-                      data-testid={`button-link-transactions-${contract.id}`}
-                    >
-                      <Link2 className="w-4 h-4 text-primary" />
-                    </Button>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => handleEdit(contract)}
-                      data-testid={`button-edit-contract-${contract.id}`}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => deleteMutation.mutate(contract.id)}
-                      disabled={deleteMutation.isPending}
-                      data-testid={`button-delete-contract-${contract.id}`}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <div className="flex items-center">
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => handleToggleActive(contract)}
+                        disabled={updateMutation.isPending}
+                        title={contract.isActive ? "Deaktivieren" : "Aktivieren"}
+                        data-testid={`button-toggle-contract-${contract.id}`}
+                      >
+                        <Power className={`w-4 h-4 ${contract.isActive ? "text-green-500" : "text-muted-foreground"}`} />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => linkTransactionsMutation.mutate(contract.id)}
+                        disabled={linkTransactionsMutation.isPending}
+                        title="Passende Buchungen verknüpfen"
+                        data-testid={`button-link-transactions-${contract.id}`}
+                      >
+                        <Link2 className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => handleEdit(contract)}
+                        data-testid={`button-edit-contract-${contract.id}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => deleteMutation.mutate(contract.id)}
+                        disabled={deleteMutation.isPending}
+                        data-testid={`button-delete-contract-${contract.id}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -371,12 +377,12 @@ export default function Contracts() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Verträge</h2>
-            <p className="text-muted-foreground mt-1">Wiederkehrende Einnahmen und Ausgaben verwalten</p>
+            <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Verträge</h2>
+            <p className="text-muted-foreground text-sm mt-1">Wiederkehrende Einnahmen und Ausgaben verwalten</p>
           </div>
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <Switch 
                 id="show-inactive" 
@@ -384,7 +390,7 @@ export default function Contracts() {
                 onCheckedChange={setShowInactive}
                 data-testid="switch-show-inactive"
               />
-              <Label htmlFor="show-inactive" className="text-sm">Inaktive anzeigen</Label>
+              <Label htmlFor="show-inactive" className="text-xs sm:text-sm">Inaktive</Label>
             </div>
             <Dialog open={isDialogOpen} onOpenChange={(open) => {
               setIsDialogOpen(open);
@@ -394,12 +400,13 @@ export default function Contracts() {
               }
             }}>
               <DialogTrigger asChild>
-                <Button data-testid="button-create-contract">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Neuer Vertrag
+                <Button size="sm" data-testid="button-create-contract">
+                  <Plus className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Neuer Vertrag</span>
+                  <span className="sm:hidden">Neu</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="w-[95vw] sm:w-auto sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>{editingId ? "Vertrag bearbeiten" : "Neuen Vertrag erstellen"}</DialogTitle>
                 </DialogHeader>

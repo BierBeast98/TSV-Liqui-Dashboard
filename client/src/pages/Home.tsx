@@ -144,15 +144,15 @@ export default function Home() {
   return (
     <Layout>
       <div className="space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">Finanzübersicht</h2>
-            <p className="text-muted-foreground mt-1">Willkommen zurück. Hier ist die Zusammenfassung.</p>
+            <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Finanzübersicht</h2>
+            <p className="text-muted-foreground text-sm mt-1">Willkommen zurück. Hier ist die Zusammenfassung.</p>
           </div>
           <div className="flex gap-2">
             <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger className="w-[120px] rounded-lg">
-                <SelectValue placeholder="Year" />
+              <SelectTrigger className="w-[100px] sm:w-[120px] rounded-lg h-9">
+                <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
                 {[2023, 2024, 2025].map(y => (
@@ -178,8 +178,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {/* Stats Grid - Responsive */}
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <StatCard
             title="Anfangssaldo"
             value={formatCurrency(stats?.openingBalance || 0)}
@@ -217,9 +217,9 @@ export default function Home() {
           />
         </div>
 
-        {/* Charts Section 1 */}
-        <div className="grid gap-4 md:grid-cols-7">
-          <Card className="col-span-4 rounded-xl shadow-sm border-border/60">
+        {/* Charts Section 1 - Responsive stack on mobile */}
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+          <Card className="lg:col-span-4 rounded-xl shadow-sm border-border/60">
             <CardHeader>
               <CardTitle>Einnahmen vs Ausgaben</CardTitle>
               <CardDescription>Klicken Sie auf einen Balken für Details</CardDescription>
@@ -276,7 +276,7 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="col-span-3 rounded-xl shadow-sm border-border/60">
+          <Card className="lg:col-span-3 rounded-xl shadow-sm border-border/60">
             <CardHeader>
               <CardTitle>Kategorien-Verteilung</CardTitle>
               <CardDescription>Wohin fließt das Geld</CardDescription>
@@ -363,9 +363,9 @@ export default function Home() {
           </Card>
       </div>
 
-      {/* Drill-Down Dialog */}
+      {/* Drill-Down Dialog - Responsive */}
       <Dialog open={!!drillDown} onOpenChange={(open) => !open && setDrillDown(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] w-[95vw] md:w-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-4">
               <span>
@@ -385,7 +385,7 @@ export default function Home() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             <Button 
               variant={drillDown?.type === "all" ? "default" : "outline"} 
               size="sm"
@@ -400,7 +400,7 @@ export default function Home() {
               onClick={() => drillDown && setDrillDown({ ...drillDown, type: "income" })}
               data-testid="button-filter-income"
             >
-              Nur Einnahmen
+              Einnahmen
             </Button>
             <Button 
               variant={drillDown?.type === "expenses" ? "default" : "outline"} 
@@ -408,7 +408,7 @@ export default function Home() {
               onClick={() => drillDown && setDrillDown({ ...drillDown, type: "expenses" })}
               data-testid="button-filter-expenses"
             >
-              Nur Ausgaben
+              Ausgaben
             </Button>
           </div>
 
