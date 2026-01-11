@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
 import { useYear } from "@/contexts/YearContext";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   Table, 
   TableBody, 
@@ -32,8 +32,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TransactionForm } from "@/components/TransactionForm";
-import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash, FileUp, Search, Filter, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, Tags, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,10 @@ export default function Transactions() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<any>(null);
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState<string>("");
   
   // Year from global context (persisted in localStorage)
   const { selectedYear: year, setSelectedYear: setYear } = useYear();
@@ -139,6 +144,63 @@ export default function Transactions() {
   const uploadTx = useUploadTransactions();
   const autoCat = useAutoCategorize();
   const { toast } = useToast();
+
+  // Bulk update mutation
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ ids, updates }: { ids: number[], updates: { categoryId?: number | null } }) => {
+      const res = await apiRequest("PATCH", "/api/transactions/bulk", { ids, updates });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      setSelectedIds(new Set());
+      setBulkCategoryId("");
+      toast({ 
+        title: "Sammelbearbeitung erfolgreich", 
+        description: `${data.updatedCount} Buchungen wurden aktualisiert.` 
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  });
+
+  // Selection helpers
+  const allCurrentIds = useMemo(() => sortedTransactions?.map((tx: any) => tx.id) || [], [sortedTransactions]);
+  const allSelected = allCurrentIds.length > 0 && allCurrentIds.every((id: number) => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allCurrentIds));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkCategoryId("");
+  };
+
+  const handleBulkCategoryChange = () => {
+    if (!bulkCategoryId || selectedIds.size === 0) return;
+    const categoryValue = bulkCategoryId === "none" ? null : Number(bulkCategoryId);
+    bulkUpdateMutation.mutate({ 
+      ids: Array.from(selectedIds), 
+      updates: { categoryId: categoryValue } 
+    });
+  };
 
   const handleAutoCategorize = async () => {
     try {
@@ -452,11 +514,60 @@ export default function Transactions() {
         )}
       </div>
 
+      {/* Bulk Action Bar - Only shown when items are selected */}
+      {someSelected && (
+        <div className="flex items-center gap-4 p-4 mb-4 bg-primary/5 border border-primary/20 rounded-xl" data-testid="bulk-action-bar">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-sm">
+              {selectedIds.size} ausgewählt
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={clearSelection}
+              title="Auswahl aufheben"
+              data-testid="button-clear-selection"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <Tags className="w-4 h-4 text-muted-foreground" />
+            <Select value={bulkCategoryId} onValueChange={setBulkCategoryId}>
+              <SelectTrigger className="w-[200px]" data-testid="select-bulk-category">
+                <SelectValue placeholder="Kategorie wählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Keine Kategorie</SelectItem>
+                {categories?.map((cat) => (
+                  <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              onClick={handleBulkCategoryChange}
+              disabled={!bulkCategoryId || bulkUpdateMutation.isPending}
+              data-testid="button-apply-bulk-category"
+            >
+              {bulkUpdateMutation.isPending ? "Wird angewendet..." : "Kategorie anwenden"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
+              <TableHead className="w-[50px]">
+                <Checkbox 
+                  checked={allSelected}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Alle auswählen"
+                  data-testid="checkbox-select-all"
+                />
+              </TableHead>
               <TableHead className="w-[120px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={() => toggleSort('date')}>
                 <div className="flex items-center">Datum <SortIcon column="date" /></div>
               </TableHead>
@@ -481,17 +592,29 @@ export default function Transactions() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Transaktionen werden geladen...</TableCell>
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">Transaktionen werden geladen...</TableCell>
               </TableRow>
             ) : sortedTransactions?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   Keine Transaktionen gefunden. Passen Sie die Filter an oder wählen Sie ein anderes Jahr.
                 </TableCell>
               </TableRow>
             ) : (
               sortedTransactions?.map((tx) => (
-                <TableRow key={tx.id} className="group transition-colors hover:bg-muted/30">
+                <TableRow 
+                  key={tx.id} 
+                  className={`group transition-colors ${selectedIds.has(tx.id) ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`}
+                  data-testid={`transaction-row-${tx.id}`}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox 
+                      checked={selectedIds.has(tx.id)}
+                      onCheckedChange={() => toggleSelectOne(tx.id)}
+                      aria-label={`Buchung ${tx.id} auswählen`}
+                      data-testid={`checkbox-transaction-${tx.id}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium font-mono text-xs text-muted-foreground">
                     {format(new Date(tx.date), "MMM d, yyyy")}
                   </TableCell>
