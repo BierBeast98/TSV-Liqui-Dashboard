@@ -210,15 +210,20 @@ export async function registerRoutes(
   });
 
   // Bulk update transactions (category, etc.)
+  const bulkUpdateSchema = z.object({
+    ids: z.array(z.number().int().positive()).min(1, "Keine Buchungen ausgewählt"),
+    updates: z.object({
+      categoryId: z.number().int().nullable().optional(),
+    }).refine(obj => Object.keys(obj).length > 0, "Keine Änderungen angegeben")
+  });
+
   app.patch("/api/transactions/bulk", isAuthenticated, async (req, res) => {
     try {
-      const { ids, updates } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ message: "Keine Buchungen ausgewählt" });
+      const parsed = bulkUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
       }
-      if (!updates || typeof updates !== 'object') {
-        return res.status(400).json({ message: "Keine Änderungen angegeben" });
-      }
+      const { ids, updates } = parsed.data;
       
       const updatedCount = await storage.bulkUpdateTransactions(ids, updates);
       res.json({ updatedCount });

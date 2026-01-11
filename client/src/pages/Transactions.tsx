@@ -165,10 +165,17 @@ export default function Transactions() {
     }
   });
 
+  // Clear selection when filters, year, or transactions change
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkCategoryId("");
+  }, [year, categoryId, accountId, search, minAmount, maxAmount, startDate, endDate]);
+
   // Selection helpers
   const allCurrentIds = useMemo(() => sortedTransactions?.map((tx: any) => tx.id) || [], [sortedTransactions]);
   const allSelected = allCurrentIds.length > 0 && allCurrentIds.every((id: number) => selectedIds.has(id));
-  const someSelected = selectedIds.size > 0;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+  const hasSelection = selectedIds.size > 0;
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -515,7 +522,7 @@ export default function Transactions() {
       </div>
 
       {/* Bulk Action Bar - Only shown when items are selected */}
-      {someSelected && (
+      {hasSelection && (
         <div className="flex items-center gap-4 p-4 mb-4 bg-primary/5 border border-primary/20 rounded-xl" data-testid="bulk-action-bar">
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-sm">
@@ -562,7 +569,7 @@ export default function Transactions() {
             <TableRow>
               <TableHead className="w-[50px]">
                 <Checkbox 
-                  checked={allSelected}
+                  checked={allSelected ? true : someSelected ? "indeterminate" : false}
                   onCheckedChange={toggleSelectAll}
                   aria-label="Alle auswählen"
                   data-testid="checkbox-select-all"
