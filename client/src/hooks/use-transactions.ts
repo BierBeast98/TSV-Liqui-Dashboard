@@ -2,10 +2,30 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertTransaction } from "@shared/schema";
 
-export function useTransactions(params?: { year?: number; categoryId?: number; type?: 'income' | 'expense'; search?: string }) {
+export function useTransactions(params?: { 
+  year?: number; 
+  years?: number[];  // Multiple years support
+  categoryId?: number;
+  categoryIds?: number[];  // Multiple categories support
+  accountId?: number;
+  accountIds?: number[];  // Multiple accounts support
+  type?: 'income' | 'expense'; 
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+}) {
   const queryString = params ? '?' + new URLSearchParams(
     Object.entries(params).reduce((acc, [key, val]) => {
-      if (val !== undefined && val !== null && val !== '') acc[key] = String(val);
+      if (val !== undefined && val !== null && val !== '') {
+        // Convert arrays to comma-separated strings
+        if (Array.isArray(val)) {
+          if (val.length > 0) acc[key] = val.join(',');
+        } else {
+          acc[key] = String(val);
+        }
+      }
       return acc;
     }, {} as Record<string, string>)
   ).toString() : '';

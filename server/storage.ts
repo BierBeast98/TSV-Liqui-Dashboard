@@ -37,9 +37,12 @@ export interface IStorage extends IAuthStorage {
 
   // Transactions
   getTransactions(params?: { 
-    year?: number; 
+    year?: number;
+    years?: number[];  // Multiple years support
     categoryId?: number; 
+    categoryIds?: number[];  // Multiple categories support
     accountId?: number;
+    accountIds?: number[];  // Multiple accounts support
     account?: string; 
     search?: string;
     startDate?: string;
@@ -277,9 +280,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTransactions(params?: { 
-    year?: number; 
-    categoryId?: number; 
+    year?: number;
+    years?: number[];  // Multiple years support
+    categoryId?: number;
+    categoryIds?: number[];  // Multiple categories support
     accountId?: number;
+    accountIds?: number[];  // Multiple accounts support
     account?: string; 
     search?: string;
     startDate?: string;
@@ -313,13 +319,30 @@ export class DatabaseStorage implements IStorage {
 
     const filters = [];
 
-    if (params?.year) {
+    // Support multiple years with safe parameterization
+    if (params?.years && params.years.length > 0) {
+      // Use OR conditions for year filtering (safe from SQL injection)
+      const yearConditions = params.years.map(y => sql`EXTRACT(YEAR FROM ${transactions.date}) = ${y}`);
+      if (yearConditions.length === 1) {
+        filters.push(yearConditions[0]);
+      } else {
+        filters.push(sql`(${sql.join(yearConditions, sql` OR `)})`);
+      }
+    } else if (params?.year) {
       filters.push(sql`EXTRACT(YEAR FROM ${transactions.date}) = ${params.year}`);
     }
-    if (params?.categoryId) {
+    
+    // Support multiple categories with IN clause
+    if (params?.categoryIds && params.categoryIds.length > 0) {
+      filters.push(inArray(transactions.categoryId, params.categoryIds));
+    } else if (params?.categoryId) {
       filters.push(eq(transactions.categoryId, params.categoryId));
     }
-    if (params?.accountId) {
+    
+    // Support multiple accounts with IN clause
+    if (params?.accountIds && params.accountIds.length > 0) {
+      filters.push(inArray(transactions.accountId, params.accountIds));
+    } else if (params?.accountId) {
       filters.push(eq(transactions.accountId, params.accountId));
     }
     if (params?.account && params.account !== "all") {

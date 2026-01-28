@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
-import { useYear } from "@/contexts/YearContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   Table, 
@@ -41,6 +40,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { MultiSelect } from "@/components/MultiSelect";
 
 export default function Transactions() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -57,17 +57,32 @@ export default function Transactions() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState<string>("");
   
-  // Year from global context (persisted in localStorage)
-  const { selectedYear: year, setSelectedYear: setYear } = useYear();
+  // Multi-select filter states - load from localStorage for persistence
+  // Default to current year if no years selected (maintain backwards compatibility)
+  const currentYear = new Date().getFullYear();
+  const [selectedYears, setSelectedYears] = useState<string[]>(() => {
+    const saved = localStorage.getItem('txFilter_years');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : [String(currentYear)];
+      } catch {
+        return [String(currentYear)];
+      }
+    }
+    return [String(currentYear)];
+  });
   
-  // Other filters - load from localStorage for persistence across navigation
-  const [categoryId, setCategoryId] = useState<string>(() => {
-    return localStorage.getItem('txFilter_categoryId') || "all";
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('txFilter_categories');
+    return saved ? JSON.parse(saved) : [];
   });
-  const [accountFilter, setAccountFilter] = useState<string>("all");
-  const [accountId, setAccountId] = useState<string>(() => {
-    return localStorage.getItem('txFilter_accountId') || "all";
+  
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(() => {
+    const saved = localStorage.getItem('txFilter_accounts');
+    return saved ? JSON.parse(saved) : [];
   });
+  
   const [search, setSearch] = useState("");
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
@@ -77,43 +92,52 @@ export default function Transactions() {
   
   // Persist filters to localStorage
   useEffect(() => {
-    localStorage.setItem('txFilter_categoryId', categoryId);
-  }, [categoryId]);
+    localStorage.setItem('txFilter_years', JSON.stringify(selectedYears));
+  }, [selectedYears]);
   
   useEffect(() => {
-    localStorage.setItem('txFilter_accountId', accountId);
-  }, [accountId]);
+    localStorage.setItem('txFilter_categories', JSON.stringify(selectedCategories));
+  }, [selectedCategories]);
+  
+  useEffect(() => {
+    localStorage.setItem('txFilter_accounts', JSON.stringify(selectedAccounts));
+  }, [selectedAccounts]);
   
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
   const { data: accounts } = useQuery<any[]>({ queryKey: ["/api/accounts"] });
 
+  // Convert selected string arrays to number arrays for API
+  const yearsAsNumbers = selectedYears.length > 0 ? selectedYears.map(Number) : undefined;
+  const categoriesAsNumbers = selectedCategories.length > 0 ? selectedCategories.map(Number) : undefined;
+  const accountsAsNumbers = selectedAccounts.length > 0 ? selectedAccounts.map(Number) : undefined;
+
   const { data: transactions, isLoading } = useTransactions({ 
-    year, 
-    categoryId: categoryId !== "all" ? Number(categoryId) : undefined,
-    accountId: accountId !== "all" ? Number(accountId) : undefined,
+    years: yearsAsNumbers,
+    categoryIds: categoriesAsNumbers,
+    accountIds: accountsAsNumbers,
     search: search || undefined,
     minAmount: minAmount ? Number(minAmount) : undefined,
     maxAmount: maxAmount ? Number(maxAmount) : undefined,
     startDate: startDate || undefined,
     endDate: endDate || undefined,
-  } as any) as any;
+  });
 
   const resetFilters = () => {
-    const currentYear = new Date().getFullYear();
-    setYear(currentYear);
-    setCategoryId("all");
-    setAccountFilter("all");
-    setAccountId("all");
+    // Reset to current year (not empty) to maintain backwards compatibility
+    setSelectedYears([String(currentYear)]);
+    setSelectedCategories([]);
+    setSelectedAccounts([]);
     setSearch("");
     setMinAmount("");
     setMaxAmount("");
     setStartDate("");
     setEndDate("");
-    // Clear persisted filters (year is handled by YearContext)
-    localStorage.setItem('txFilter_categoryId', 'all');
-    localStorage.setItem('txFilter_accountId', 'all');
+    // Clear persisted filters, reset years to current year
+    localStorage.setItem('txFilter_years', JSON.stringify([String(currentYear)]));
+    localStorage.setItem('txFilter_categories', '[]');
+    localStorage.setItem('txFilter_accounts', '[]');
   };
 
   // Sorting Logic
@@ -251,11 +275,11 @@ export default function Transactions() {
     }
   });
 
-  // Clear selection when filters, year, or transactions change
+  // Clear selection when filters or transactions change
   useEffect(() => {
     setSelectedIds(new Set());
     setBulkCategoryId("");
-  }, [year, categoryId, accountId, search, minAmount, maxAmount, startDate, endDate]);
+  }, [selectedYears, selectedCategories, selectedAccounts, search, minAmount, maxAmount, startDate, endDate]);
 
   // Selection helpers
   const allCurrentIds = useMemo(() => sortedTransactions?.map((tx: any) => tx.id) || [], [sortedTransactions]);
@@ -509,40 +533,32 @@ export default function Transactions() {
             />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger className="rounded-lg h-10">
-                <SelectValue placeholder="Jahr" />
-              </SelectTrigger>
-              <SelectContent>
-                {[2023, 2024, 2025, 2026].map(y => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              name="years"
+              options={[2023, 2024, 2025, 2026].map(y => ({ value: String(y), label: String(y) }))}
+              selected={selectedYears}
+              onChange={setSelectedYears}
+              placeholder="Jahr"
+              allLabel="Alle Jahre"
+            />
 
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="rounded-lg h-10">
-                <SelectValue placeholder="Kategorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Kategorien</SelectItem>
-                {categories?.map((cat) => (
-                  <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              name="categories"
+              options={(categories || []).map((cat: any) => ({ value: String(cat.id), label: cat.name }))}
+              selected={selectedCategories}
+              onChange={setSelectedCategories}
+              placeholder="Kategorie"
+              allLabel="Alle Kategorien"
+            />
 
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger className="rounded-lg h-10">
-                <SelectValue placeholder="Konto" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Konten</SelectItem>
-                {accounts?.map((acc) => (
-                  <SelectItem key={acc.id} value={String(acc.id)}>{acc.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MultiSelect
+              name="accounts"
+              options={(accounts || []).map((acc: any) => ({ value: String(acc.id), label: acc.name }))}
+              selected={selectedAccounts}
+              onChange={setSelectedAccounts}
+              placeholder="Konto"
+              allLabel="Alle Konten"
+            />
 
             <div className="flex gap-1">
               <Button 
@@ -550,6 +566,7 @@ export default function Transactions() {
                 size="sm" 
                 className="rounded-lg h-10 flex-1 px-2"
                 onClick={() => setShowAdvanced(!showAdvanced)}
+                data-testid="button-advanced-filters"
               >
                 <Filter className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1">{showAdvanced ? "Weniger" : "Mehr"}</span>
@@ -559,6 +576,7 @@ export default function Transactions() {
                 size="sm" 
                 className="rounded-lg h-10 px-2"
                 onClick={resetFilters}
+                data-testid="button-reset-filters"
               >
                 <X className="w-4 h-4" />
               </Button>

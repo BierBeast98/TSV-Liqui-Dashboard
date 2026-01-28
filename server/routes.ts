@@ -118,10 +118,21 @@ export async function registerRoutes(
   // === Transactions ===
   app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
     const query = req.query as any;
+    
+    // Parse comma-separated values for multi-select filters
+    const parseIds = (value: string | undefined): number[] | undefined => {
+      if (!value) return undefined;
+      const ids = value.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      return ids.length > 0 ? ids : undefined;
+    };
+    
     const params = {
       year: query.year ? Number(query.year) : undefined,
+      years: parseIds(query.years),  // Multiple years: "2024,2025"
       categoryId: query.categoryId ? Number(query.categoryId) : undefined,
+      categoryIds: parseIds(query.categoryIds),  // Multiple categories: "1,2,3"
       accountId: query.accountId ? Number(query.accountId) : undefined,
+      accountIds: parseIds(query.accountIds),  // Multiple accounts: "1,2"
       account: query.account,
       search: query.search,
       startDate: query.startDate,
