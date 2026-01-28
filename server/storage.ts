@@ -349,7 +349,8 @@ export class DatabaseStorage implements IStorage {
       filters.push(eq(transactions.account, params.account));
     }
     if (params?.search) {
-      filters.push(sql`${transactions.description} ILIKE ${`%${params.search}%`}`);
+      // Search in both description and counterparty fields
+      filters.push(sql`(${transactions.description} ILIKE ${`%${params.search}%`} OR ${transactions.counterparty} ILIKE ${`%${params.search}%`})`);
     }
     if (params?.startDate) {
       filters.push(sql`${transactions.date} >= ${new Date(params.startDate)}`);
