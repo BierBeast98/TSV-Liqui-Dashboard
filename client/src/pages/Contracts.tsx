@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,6 +56,10 @@ export default function Contracts() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [selectedSuggestion, setSelectedSuggestion] = useState<ContractSuggestionWithDetails | null>(null);
   const [isTransactionsDialogOpen, setIsTransactionsDialogOpen] = useState(false);
+  
+  // Detail view dialog state
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailContract, setDetailContract] = useState<ContractWithCategory | null>(null);
 
   const { data: contracts, isLoading } = useQuery<ContractWithCategory[]>({
     queryKey: ["/api/contracts", showInactive],
@@ -298,8 +302,9 @@ export default function Contracts() {
           {items.map(contract => (
             <Card 
               key={contract.id} 
-              className={`hover-elevate ${!contract.isActive ? 'opacity-60' : ''}`}
+              className={`hover-elevate cursor-pointer ${!contract.isActive ? 'opacity-60' : ''}`}
               data-testid={`card-contract-${contract.id}`}
+              onClick={() => { setDetailContract(contract); setIsDetailOpen(true); }}
             >
               <CardContent className="p-3 md:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
@@ -331,7 +336,7 @@ export default function Contracts() {
                         size="icon" 
                         variant="ghost"
                         className="h-8 w-8"
-                        onClick={() => handleToggleActive(contract)}
+                        onClick={(e) => { e.stopPropagation(); handleToggleActive(contract); }}
                         disabled={updateMutation.isPending}
                         title={contract.isActive ? "Deaktivieren" : "Aktivieren"}
                         data-testid={`button-toggle-contract-${contract.id}`}
@@ -342,7 +347,7 @@ export default function Contracts() {
                         size="icon" 
                         variant="ghost"
                         className="h-8 w-8"
-                        onClick={() => linkTransactionsMutation.mutate(contract.id)}
+                        onClick={(e) => { e.stopPropagation(); linkTransactionsMutation.mutate(contract.id); }}
                         disabled={linkTransactionsMutation.isPending}
                         title="Passende Buchungen verknüpfen"
                         data-testid={`button-link-transactions-${contract.id}`}
@@ -353,7 +358,7 @@ export default function Contracts() {
                         size="icon" 
                         variant="ghost"
                         className="h-8 w-8"
-                        onClick={() => handleEdit(contract)}
+                        onClick={(e) => { e.stopPropagation(); handleEdit(contract); }}
                         data-testid={`button-edit-contract-${contract.id}`}
                       >
                         <Pencil className="w-4 h-4" />
@@ -362,7 +367,7 @@ export default function Contracts() {
                         size="icon" 
                         variant="ghost"
                         className="h-8 w-8"
-                        onClick={() => deleteMutation.mutate(contract.id)}
+                        onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(contract.id); }}
                         disabled={deleteMutation.isPending}
                         data-testid={`button-delete-contract-${contract.id}`}
                       >
@@ -746,6 +751,98 @@ export default function Contracts() {
                 >
                   <Check className="w-4 h-4 mr-2" />
                   Als Vertrag übernehmen
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Contract Detail Dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if(!open) setDetailContract(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Vertragsdetails</DialogTitle>
+            <DialogDescription>
+              Alle Informationen zu diesem Vertrag
+            </DialogDescription>
+          </DialogHeader>
+          {detailContract && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center ${
+                  detailContract.type === "income" ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
+                }`}>
+                  {detailContract.type === "income" ? (
+                    <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <TrendingDown className="w-6 h-6 text-red-600 dark:text-red-400" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">{detailContract.name}</p>
+                  <Badge variant={detailContract.isActive ? "default" : "secondary"}>
+                    {detailContract.isActive ? "Aktiv" : "Inaktiv"}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Betrag</p>
+                  <p className={`font-bold text-lg ${detailContract.type === "income" ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {detailContract.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(detailContract.amount))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Rhythmus</p>
+                  <p className="font-medium">{frequencyLabels[detailContract.frequency as Frequency]}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Typ</p>
+                  <p className="font-medium">{detailContract.type === "income" ? "Einnahme" : "Ausgabe"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Kategorie</p>
+                  <p className="font-medium">{detailContract.categoryName || "-"}</p>
+                </div>
+              </div>
+
+              {detailContract.description && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Beschreibung</p>
+                  <p className="font-medium whitespace-pre-wrap">{detailContract.description}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Jahresbetrag</p>
+                  <p className={`font-bold ${detailContract.type === "income" ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {detailContract.type === "income" ? "+" : "-"}{formatCurrency(Math.abs(detailContract.amount) * frequencyMultipliers[detailContract.frequency as Frequency])}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Erstellt am</p>
+                  <p className="font-medium">
+                    {detailContract.createdAt ? new Date(detailContract.createdAt).toLocaleDateString('de-DE') : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsDetailOpen(false)}>
+                  Schließen
+                </Button>
+                <Button onClick={() => { 
+                  setIsDetailOpen(false); 
+                  handleEdit(detailContract); 
+                }}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Bearbeiten
                 </Button>
               </div>
             </div>
