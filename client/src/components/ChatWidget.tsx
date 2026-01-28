@@ -131,11 +131,11 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
       {!isOpen && (
         <Button
           data-testid="button-open-chat"
-          size="icon"
-          className="fixed bottom-4 right-4 h-14 w-14 rounded-full shadow-lg z-50"
+          size="lg"
+          className="fixed bottom-4 right-4 rounded-full shadow-lg z-50"
           onClick={() => setIsOpen(true)}
         >
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-5 w-5" />
         </Button>
       )}
 
@@ -150,7 +150,7 @@ export function ChatWidget({ year, account }: ChatWidgetProps) {
               data-testid="button-close-chat"
               size="icon"
               variant="ghost"
-              className="h-8 w-8 text-primary-foreground hover:bg-primary/80"
+              className="text-primary-foreground"
               onClick={() => setIsOpen(false)}
             >
               <X className="h-4 w-4" />

@@ -1,0 +1,5 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Glaeubiger ID";"Mandatsreferenz";"Kundenreferenz (End-to-End)";"Sammlerreferenz";"Lastschrift Ursprungsbetrag";"Auslagenersatz Ruecklastschrift";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"BIC (SWIFT-Code)";"Betrag";"Waehrung";"Info"
+"DE22764500003406366405";"30.12.25";"01.01.26";"ZINSEN";"";"";"";"";"";"";"";"";"9000921123";"76450000";"11,76";"EUR";"Umsatz gebucht"
+"DE22764500003406366405";"30.12.24";"01.01.25";"SOLIDARITAETSZUSCHLAG";"";"";"";"";"";"";"";"";"9000299512";"76450000";"-1,45";"EUR";"Umsatz gebucht"
+"DE22764500003406366405";"30.12.24";"01.01.25";"KAPITALERTRAGSTEUER";"";"";"";"";"";"";"";"";"9000299504";"76450000";"-26,54";"EUR";"Umsatz gebucht"
+"DE22764500003406366405";"30.12.24";"01.01.25";"ZINSEN";"";"";"";"";"";"";"";"";"9000921123";"76450000";"106,17";"EUR";"Umsatz gebucht"

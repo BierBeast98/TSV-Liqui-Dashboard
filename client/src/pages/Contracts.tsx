@@ -297,7 +297,7 @@ export default function Contracts() {
               data-testid={`card-contract-${contract.id}`}
             >
               <CardContent className="p-3 md:p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-md flex items-center justify-center ${
                       contract.type === "income" ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
@@ -377,7 +377,7 @@ export default function Contracts() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Verträge</h2>
             <p className="text-muted-foreground text-sm mt-1">Wiederkehrende Einnahmen und Ausgaben verwalten</p>

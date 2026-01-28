@@ -411,7 +411,7 @@ export default function Transactions() {
   return (
     <Layout>
       <div className="flex flex-col gap-4 mb-6 md:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight">Transaktionen</h2>
             <p className="text-muted-foreground text-sm mt-1">Verwalten Sie Ihre Finanzbewegungen.</p>

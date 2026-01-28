@@ -144,7 +144,7 @@ export default function Home() {
   return (
     <Layout>
       <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Finanzübersicht</h2>
             <p className="text-muted-foreground text-sm mt-1">Willkommen zurück. Hier ist die Zusammenfassung.</p>

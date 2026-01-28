@@ -334,7 +334,8 @@ export async function registerRoutes(
           skip_empty_lines: true,
           trim: true,
           delimiter: ';',
-          relax_column_count: true
+          relax_column_count: true,
+          bom: true  // Handle BOM (Byte Order Mark) from Excel exports
         });
 
         if (records.length === 0) {
@@ -360,14 +361,41 @@ export async function registerRoutes(
         const toImport: InsertTransaction[] = records.map((r: any) => {
           const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
           const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
-          const descStr = r['Verwendungszweck'] || r['Buchungstext'] || r.Description || r.description || r.Text;
-          const counterpartyStr = r['Name Zahlungsbeteiligter'] || r['Zahlungsbeteiligter'] || r['Empfänger'] || r['Auftraggeber'] || '';
+          
+          // Build description from multiple possible fields
+          const verwendungszweck = r['Verwendungszweck'] || '';
+          const buchungstext = r['Buchungstext'] || '';
+          // For Sparkasse format: combine Buchungstext + Verwendungszweck if both exist
+          // For VR/other formats: use Verwendungszweck or Buchungstext
+          let descStr = '';
+          if (verwendungszweck && buchungstext) {
+            // Sparkasse format: Buchungstext is type (e.g. ZINSEN), Verwendungszweck is purpose
+            descStr = verwendungszweck.trim() ? `${buchungstext}: ${verwendungszweck}` : buchungstext;
+          } else {
+            descStr = verwendungszweck || buchungstext || r.Description || r.description || r.Text || '';
+          }
+          
+          // Counterparty: Support multiple column names from different bank formats
+          const counterpartyStr = 
+            r['Name Zahlungsbeteiligter'] || 
+            r['Zahlungsbeteiligter'] || 
+            r['Beguenstigter/Zahlungspflichtiger'] ||  // Sparkasse format
+            r['Begünstigter/Zahlungspflichtiger'] ||   // With umlaut
+            r['Empfänger'] || 
+            r['Auftraggeber'] || 
+            '';
           
           if (!dateStr || !amountStr) return null;
 
           let date: Date;
           if (typeof dateStr === 'string' && dateStr.includes('.')) {
-            const [day, month, year] = dateStr.split('.');
+            const parts = dateStr.split('.');
+            let [day, month, year] = parts;
+            // Handle 2-digit year (Sparkasse format: DD.MM.YY)
+            if (year && year.length === 2) {
+              const yearNum = parseInt(year);
+              year = yearNum >= 70 ? `19${year}` : `20${year}`;
+            }
             date = new Date(`${year}-${month}-${day}`);
           } else {
             date = new Date(dateStr);

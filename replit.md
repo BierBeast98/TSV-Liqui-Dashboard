@@ -5,11 +5,29 @@
 A web-based finance dashboard for a German sports club (TSV Greding e. V.) that replaces manual Excel workflows. The application allows the club treasurer to upload bank CSV statements, store historical transaction data, analyze income and expenses by category, and project future liquidity until year-end.
 
 **Core Features:**
-- CSV upload of bank statements with duplicate detection
-- Transaction categorization (income/expense types)
+- Multi-bank CSV upload with automatic format detection (VR-Bank, Sparkasse)
+- Duplicate detection and transaction categorization
 - Visual dashboards with charts (bar, line, pie)
 - Financial forecasting based on recurring transactions
 - User authentication via Replit Auth
+- AI-powered financial assistant chatbot (German language)
+- Contracts module with automatic transaction linking
+- Responsive design for desktop, tablet, and mobile
+
+## Supported Bank Formats
+
+The CSV parser automatically detects and handles multiple German bank export formats:
+
+### VR-Bank Format
+- Delimiter: Semicolon (;)
+- Date format: DD.MM.YYYY
+- Columns: IBAN Auftragskonto, Buchungstag, Verwendungszweck, Name Zahlungsbeteiligter, Betrag
+
+### Sparkasse Format
+- Delimiter: Semicolon (;)
+- Date format: DD.MM.YY (2-digit year)
+- Columns: Auftragskonto, Buchungstag, Valutadatum, Buchungstext, Verwendungszweck, Beguenstigter/Zahlungspflichtiger, Betrag
+- Description is built from Buchungstext + Verwendungszweck
 
 ## User Preferences
 

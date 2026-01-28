@@ -61,7 +61,7 @@ export default function Events() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold font-display tracking-tight text-foreground">Veranstaltungen</h2>
             <p className="text-muted-foreground text-sm mt-1">Einnahmen und Ausgaben bei Festen und Events tracken</p>
