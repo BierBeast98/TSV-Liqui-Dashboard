@@ -247,6 +247,11 @@ export default function Contracts() {
       grouped[c.frequency as Frequency].push(c);
     });
     
+    // Sort each group by amount (descending by absolute value)
+    grouped.monthly.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    grouped.quarterly.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    grouped.yearly.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    
     return grouped;
   };
 
