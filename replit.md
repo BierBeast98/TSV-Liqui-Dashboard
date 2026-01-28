@@ -12,6 +12,7 @@ A web-based finance dashboard for a German sports club (TSV Greding e. V.) that 
 - User authentication via Replit Auth
 - AI-powered financial assistant chatbot (German language)
 - Contracts module with automatic transaction linking
+- Multi-select filters for years, categories, and accounts
 - Responsive design for desktop, tablet, and mobile
 
 ## Supported Bank Formats
