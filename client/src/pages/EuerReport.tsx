@@ -63,7 +63,8 @@ interface EuerLineItem {
 }
 
 export default function EuerReport() {
-  const [year, setYear] = useState<number>(2024);
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState<number>(currentYear - 1); // Default to previous year for EÜR
   const [isEditing, setIsEditing] = useState(false);
   const [selectedArea, setSelectedArea] = useState<FiscalAreaSummary | null>(null);
   const { toast } = useToast();
@@ -375,7 +376,7 @@ export default function EuerReport() {
                 <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
-                {[2022, 2023, 2024, 2025].map(y => (
+                {Array.from({ length: currentYear - 2021 }, (_, i) => 2022 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
