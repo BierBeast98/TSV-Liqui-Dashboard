@@ -9,6 +9,7 @@ import multer from "multer";
 import { parse } from "csv-parse/sync";
 import path from "path";
 import fs from "fs";
+import iconv from "iconv-lite";
 import { processAssistantQuery } from "./assistant";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -327,7 +328,25 @@ export async function registerRoutes(
       const fileResults: { name: string; imported: number; duplicates: number }[] = [];
 
       for (const file of files) {
-        const csvContent = file.buffer.toString('utf8');
+        // Try to decode with different encodings (German banks often use Windows-1252)
+        let csvContent: string;
+        
+        // Check for BOM to detect UTF-8
+        const bom = file.buffer.slice(0, 3);
+        if (bom[0] === 0xEF && bom[1] === 0xBB && bom[2] === 0xBF) {
+          // UTF-8 with BOM
+          csvContent = file.buffer.toString('utf8');
+        } else {
+          // Try UTF-8 first, fallback to Windows-1252 if there are encoding issues
+          const utf8Content = file.buffer.toString('utf8');
+          // Check for replacement characters that indicate encoding issues
+          if (utf8Content.includes('�') || utf8Content.includes('\ufffd')) {
+            // Use Windows-1252 (common for German bank exports)
+            csvContent = iconv.decode(file.buffer, 'win1252');
+          } else {
+            csvContent = utf8Content;
+          }
+        }
         
         const records = parse(csvContent, {
           columns: true,
