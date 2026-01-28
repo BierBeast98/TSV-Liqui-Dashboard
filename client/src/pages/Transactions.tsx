@@ -48,6 +48,10 @@ export default function Transactions() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<any>(null);
   
+  // Detail view dialog state
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailTx, setDetailTx] = useState<any>(null);
+  
   // Contract creation dialog state
   const [isContractDialogOpen, setIsContractDialogOpen] = useState(false);
   const [contractTx, setContractTx] = useState<any>(null);
@@ -719,8 +723,9 @@ export default function Transactions() {
               sortedTransactions?.map((tx) => (
                 <TableRow 
                   key={tx.id} 
-                  className={`group transition-colors ${selectedIds.has(tx.id) ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`}
+                  className={`group transition-colors cursor-pointer ${selectedIds.has(tx.id) ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`}
                   data-testid={`transaction-row-${tx.id}`}
+                  onClick={() => { setDetailTx(tx); setIsDetailOpen(true); }}
                 >
                   <TableCell onClick={(e) => e.stopPropagation()} className="sticky left-0 bg-card z-10">
                     <Checkbox 
@@ -939,6 +944,85 @@ export default function Transactions() {
                   data-testid="button-create-contract"
                 >
                   {createContractMutation.isPending ? "Wird erstellt..." : "Vertrag erstellen"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Transaction Detail Dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if(!open) setDetailTx(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Buchungsdetails</DialogTitle>
+            <DialogDescription>
+              Alle Informationen zu dieser Buchung
+            </DialogDescription>
+          </DialogHeader>
+          {detailTx && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Datum</p>
+                  <p className="font-medium">{format(new Date(detailTx.date), "dd.MM.yyyy")}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Betrag</p>
+                  <p className={`font-bold ${detailTx.amount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                    {detailTx.amount > 0 ? '+' : ''}{formatCurrency(detailTx.amount)}
+                  </p>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm text-muted-foreground">Beschreibung / Verwendungszweck</p>
+                <p className="font-medium whitespace-pre-wrap">{detailTx.description}</p>
+              </div>
+              
+              <div>
+                <p className="text-sm text-muted-foreground">Zahlungsbeteiligter</p>
+                <p className="font-medium">{detailTx.counterparty || "-"}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Konto</p>
+                  <p className="font-medium">{detailTx.accountName || detailTx.account || "Hauptkonto"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Kategorie</p>
+                  <p className="font-medium">{detailTx.categoryName || "-"}</p>
+                </div>
+              </div>
+              
+              {detailTx.contractName && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Verknüpfter Vertrag</p>
+                  <Badge variant="outline" className="mt-1 border-primary/50 text-primary">
+                    <FileText className="w-3 h-3 mr-1" />
+                    {detailTx.contractName}
+                  </Badge>
+                </div>
+              )}
+              
+              {detailTx.recurring && !detailTx.contractId && (
+                <div>
+                  <Badge variant="secondary">Wiederkehrend</Badge>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsDetailOpen(false)}>
+                  Schließen
+                </Button>
+                <Button onClick={() => { 
+                  setIsDetailOpen(false); 
+                  setSelectedTx(detailTx); 
+                  setIsEditOpen(true); 
+                }}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Bearbeiten
                 </Button>
               </div>
             </div>
