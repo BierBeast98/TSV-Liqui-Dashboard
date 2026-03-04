@@ -56,18 +56,13 @@ Preferred communication style: Simple, everyday language.
 - **Database:** PostgreSQL
 - **ORM:** Drizzle ORM with drizzle-kit for migrations
 - **Schema Location:** shared/schema.ts (single source of truth)
-- **Session Storage:** connect-pg-simple for session persistence
-
 ### Authentication
-- **Provider:** Replit Auth (OpenID Connect)
-- **Session Management:** Express-session with PostgreSQL store
-- **Protected Routes:** isAuthenticated middleware on all /api routes
+- **None** - Authentication has been removed. All routes are publicly accessible.
 
 ### Shared Code Pattern
 - The `shared/` directory contains code used by both frontend and backend
 - `shared/schema.ts` - Database schemas and Zod validation schemas
 - `shared/routes.ts` - API contract definitions with input/output types
-- `shared/models/auth.ts` - User and session table definitions
 
 ### Build System
 - Development: `tsx server/index.ts` with Vite dev server middleware

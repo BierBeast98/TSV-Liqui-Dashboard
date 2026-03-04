@@ -4,7 +4,6 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { insertTransactionSchema, insertContractSchema, type InsertTransaction } from "@shared/schema";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
 import path from "path";
@@ -48,20 +47,16 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Setup Auth
-  await setupAuth(app);
-  registerAuthRoutes(app);
-
   // Seed Categories
   await storage.seedCategories();
 
   // === Categories ===
-  app.get(api.categories.list.path, isAuthenticated, async (req, res) => {
+  app.get(api.categories.list.path, async (req, res) => {
     const cats = await storage.getCategories();
     res.json(cats);
   });
 
-  app.post(api.categories.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.categories.create.path, async (req, res) => {
     try {
       const input = api.categories.create.input.parse(req.body);
       const cat = await storage.createCategory(input);
@@ -72,32 +67,32 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.categories.update.path, isAuthenticated, async (req, res) => {
+  app.put(api.categories.update.path, async (req, res) => {
     const input = api.categories.update.input.parse(req.body);
     const cat = await storage.updateCategory(Number(req.params.id), input);
     if (!cat) return res.status(404).send("Not found");
     res.json(cat);
   });
 
-  app.delete(api.categories.delete.path, isAuthenticated, async (req, res) => {
+  app.delete(api.categories.delete.path, async (req, res) => {
     await storage.deleteCategory(Number(req.params.id));
     res.status(204).send();
   });
 
   // === Accounts ===
-  app.get("/api/accounts", isAuthenticated, async (req, res) => {
+  app.get("/api/accounts", async (req, res) => {
     const accs = await storage.getAccounts();
     res.json(accs);
   });
 
   // === Account Balances (Opening balances per year) ===
-  app.get("/api/account-balances/:year", isAuthenticated, async (req, res) => {
+  app.get("/api/account-balances/:year", async (req, res) => {
     const year = Number(req.params.year);
     const balances = await storage.getAccountBalances(year);
     res.json(balances);
   });
 
-  app.post("/api/account-balances", isAuthenticated, async (req, res) => {
+  app.post("/api/account-balances", async (req, res) => {
     try {
       const { accountId, year, openingBalance } = req.body;
       if (!accountId || !year || openingBalance === undefined) {
@@ -116,7 +111,7 @@ export async function registerRoutes(
   });
 
   // === Transactions ===
-  app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
+  app.get(api.transactions.list.path, async (req, res) => {
     const query = req.query as any;
     
     // Parse comma-separated values for multi-select filters
@@ -144,7 +139,7 @@ export async function registerRoutes(
     res.json(txs);
   });
 
-  app.get("/api/transactions/by-ids", isAuthenticated, async (req, res) => {
+  app.get("/api/transactions/by-ids", async (req, res) => {
     const ids = req.query.ids;
     if (!ids || typeof ids !== "string") {
       return res.status(400).json({ message: "ids parameter required" });
@@ -154,7 +149,7 @@ export async function registerRoutes(
     res.json(txs);
   });
 
-  app.post(api.transactions.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.transactions.create.path, async (req, res) => {
     try {
       const input = api.transactions.create.input.parse(req.body);
       
@@ -186,7 +181,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.transactions.update.path, isAuthenticated, async (req, res) => {
+  app.put(api.transactions.update.path, async (req, res) => {
     try {
       const input = api.transactions.update.input.parse(req.body);
       const tx = await storage.updateTransaction(Number(req.params.id), input);
@@ -204,13 +199,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.transactions.delete.path, isAuthenticated, async (req, res) => {
+  app.delete(api.transactions.delete.path, async (req, res) => {
     await storage.deleteTransaction(Number(req.params.id));
     res.status(204).send();
   });
 
   // PATCH single transaction (partial update, e.g. contractId)
-  app.patch("/api/transactions/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/transactions/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
       const updates = req.body;
@@ -223,7 +218,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/transactions/all", isAuthenticated, async (req, res) => {
+  app.delete("/api/transactions/all", async (req, res) => {
     try {
       console.log("DELETE ALL: Request received");
       await storage.deleteAllTransactions();
@@ -243,7 +238,7 @@ export async function registerRoutes(
     }).refine(obj => Object.keys(obj).length > 0, "Keine Änderungen angegeben")
   });
 
-  app.patch("/api/transactions/bulk", isAuthenticated, async (req, res) => {
+  app.patch("/api/transactions/bulk", async (req, res) => {
     try {
       const parsed = bulkUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -260,7 +255,7 @@ export async function registerRoutes(
   });
 
   // Find related transactions by counterparty for contract creation
-  app.get("/api/transactions/:id/related", isAuthenticated, async (req, res) => {
+  app.get("/api/transactions/:id/related", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -329,7 +324,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.transactions.upload.path, isAuthenticated, upload.array('files', 20), async (req, res) => {
+  app.post(api.transactions.upload.path, upload.array('files', 20), async (req, res) => {
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) return res.status(400).send("No files uploaded");
     
@@ -465,7 +460,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/migration/backfill", isAuthenticated, async (req, res) => {
+  app.get("/api/migration/backfill", async (req, res) => {
     const txs = await storage.getTransactions();
     let migratedCount = 0;
     
@@ -481,7 +476,7 @@ export async function registerRoutes(
     res.json({ migratedCount });
   });
   
-  app.get("/api/migration/backfill-counterparty", isAuthenticated, async (req, res) => {
+  app.get("/api/migration/backfill-counterparty", async (req, res) => {
     const txs = await storage.getTransactions();
     let updatedCount = 0;
     
@@ -496,7 +491,7 @@ export async function registerRoutes(
     }
     res.json({ updatedCount, message: `${updatedCount} Transaktionen mit Zahlungsbeteiligtem aktualisiert` });
   });
-  app.get(api.dashboard.stats.path, isAuthenticated, async (req, res) => {
+  app.get(api.dashboard.stats.path, async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const account = req.query.account as string | undefined;
     const stats = await storage.getTotalStats(year, account);
@@ -534,7 +529,7 @@ export async function registerRoutes(
     });
   });
 
-  app.get(api.dashboard.charts.path, isAuthenticated, async (req, res) => {
+  app.get(api.dashboard.charts.path, async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const account = req.query.account as string | undefined;
     const monthly = await storage.getMonthlyStats(year, account);
@@ -548,7 +543,7 @@ export async function registerRoutes(
     });
   });
 
-  app.post(api.transactions.autoCategorize.path, isAuthenticated, async (req, res) => {
+  app.post(api.transactions.autoCategorize.path, async (req, res) => {
     const txs = await storage.getTransactions();
     const uncategorized = txs.filter(t => !t.categoryId);
     let updatedCount = 0;
@@ -564,19 +559,19 @@ export async function registerRoutes(
   });
 
   // EÜR Reports (PDF-based, manual entry)
-  app.get("/api/euer-reports", isAuthenticated, async (req, res) => {
+  app.get("/api/euer-reports", async (req, res) => {
     const reports = await storage.getEuerReports();
     res.json(reports);
   });
 
-  app.get("/api/euer-reports/:year", isAuthenticated, async (req, res) => {
+  app.get("/api/euer-reports/:year", async (req, res) => {
     const year = Number(req.params.year);
     const report = await storage.getEuerReport(year);
     if (!report) return res.status(404).json({ message: "Kein Bericht für dieses Jahr" });
     res.json(report);
   });
 
-  app.put("/api/euer-reports/:year", isAuthenticated, async (req, res) => {
+  app.put("/api/euer-reports/:year", async (req, res) => {
     try {
       const year = Number(req.params.year);
       if (isNaN(year) || year < 2000 || year > 2100) {
@@ -589,9 +584,7 @@ export async function registerRoutes(
         return isNaN(n) ? 0 : n;
       };
       
-      // Get uploadedBy from authenticated session
-      const user = req.user as any;
-      const uploadedBy = user?.claims?.email || user?.claims?.sub || 'unknown';
+      const uploadedBy = 'admin';
       
       const data = {
         year,
@@ -614,13 +607,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/euer-reports/:year", isAuthenticated, async (req, res) => {
+  app.delete("/api/euer-reports/:year", async (req, res) => {
     await storage.deleteEuerReport(Number(req.params.year));
     res.status(204).send();
   });
 
   // PDF Upload for EÜR reports
-  app.post("/api/euer-reports/:year/upload-pdf", isAuthenticated, pdfUpload.single('pdf'), async (req, res) => {
+  app.post("/api/euer-reports/:year/upload-pdf", pdfUpload.single('pdf'), async (req, res) => {
     try {
       const year = Number(req.params.year);
       if (isNaN(year) || year < 2000 || year > 2100) {
@@ -631,8 +624,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Keine PDF-Datei hochgeladen" });
       }
       
-      const user = req.user as any;
-      const uploadedBy = user?.claims?.email || user?.claims?.sub || 'unknown';
+      const uploadedBy = 'admin';
       
       // Check if report already exists
       const existingReport = await storage.getEuerReport(year);
@@ -680,7 +672,7 @@ export async function registerRoutes(
   });
 
   // Serve uploaded PDFs
-  app.get("/api/euer-reports/:year/pdf", isAuthenticated, async (req, res) => {
+  app.get("/api/euer-reports/:year/pdf", async (req, res) => {
     const year = Number(req.params.year);
     const report = await storage.getEuerReport(year);
     
@@ -698,7 +690,7 @@ export async function registerRoutes(
   // EÜR Line Items
   const validFiscalAreas = ['ideell', 'vermoegensverwaltung', 'zweckbetrieb', 'wirtschaftlich'];
   
-  app.get("/api/euer-reports/:year/items", isAuthenticated, async (req, res) => {
+  app.get("/api/euer-reports/:year/items", async (req, res) => {
     const year = Number(req.params.year);
     const fiscalArea = req.query.fiscalArea as string | undefined;
     const report = await storage.getEuerReport(year);
@@ -716,7 +708,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/euer-reports/:year/items", isAuthenticated, async (req, res) => {
+  app.put("/api/euer-reports/:year/items", async (req, res) => {
     const year = Number(req.params.year);
     const report = await storage.getEuerReport(year);
     if (!report) return res.status(404).json({ message: "Report nicht gefunden" });
@@ -727,7 +719,7 @@ export async function registerRoutes(
   });
 
   // EÜR endpoint - PDF-based with transaction fallback
-  app.get("/api/report/euer", isAuthenticated, async (req, res) => {
+  app.get("/api/report/euer", async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const pdfReport = await storage.getEuerReport(year);
     
@@ -758,7 +750,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.dashboard.forecast.path, isAuthenticated, async (req, res) => {
+  app.get(api.dashboard.forecast.path, async (req, res) => {
     // Simple linear projection based on average monthly net change
     // Or just project recurring transactions?
     // PRD says: "Calculate average monthly income and expenses... Extrapolate... Include recurring transactions explicitly"
@@ -801,12 +793,12 @@ export async function registerRoutes(
   });
 
   // === Events / Veranstaltungen ===
-  app.get("/api/events", isAuthenticated, async (req, res) => {
+  app.get("/api/events", async (req, res) => {
     const events = await storage.getEvents();
     res.json(events);
   });
 
-  app.get("/api/events/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/events/:id", async (req, res) => {
     const id = Number(req.params.id);
     const event = await storage.getEvent(id);
     if (!event) {
@@ -815,7 +807,7 @@ export async function registerRoutes(
     res.json(event);
   });
 
-  app.post("/api/events", isAuthenticated, async (req, res) => {
+  app.post("/api/events", async (req, res) => {
     const eventData = {
       ...req.body,
       date: new Date(req.body.date),
@@ -824,7 +816,7 @@ export async function registerRoutes(
     res.status(201).json(event);
   });
 
-  app.patch("/api/events/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/events/:id", async (req, res) => {
     const id = Number(req.params.id);
     const updates = { ...req.body };
     if (updates.date) {
@@ -834,20 +826,20 @@ export async function registerRoutes(
     res.json(event);
   });
 
-  app.delete("/api/events/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/events/:id", async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteEvent(id);
     res.status(204).send();
   });
 
   // Event Entries
-  app.get("/api/events/:eventId/entries", isAuthenticated, async (req, res) => {
+  app.get("/api/events/:eventId/entries", async (req, res) => {
     const eventId = Number(req.params.eventId);
     const entries = await storage.getEventEntries(eventId);
     res.json(entries);
   });
 
-  app.post("/api/events/:eventId/entries", isAuthenticated, async (req, res) => {
+  app.post("/api/events/:eventId/entries", async (req, res) => {
     const eventId = Number(req.params.eventId);
     const entryData = {
       ...req.body,
@@ -858,7 +850,7 @@ export async function registerRoutes(
     res.status(201).json(entry);
   });
 
-  app.patch("/api/event-entries/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/event-entries/:id", async (req, res) => {
     const id = Number(req.params.id);
     const updates = { ...req.body };
     if (updates.date) {
@@ -868,27 +860,27 @@ export async function registerRoutes(
     res.json(entry);
   });
 
-  app.delete("/api/event-entries/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/event-entries/:id", async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteEventEntry(id);
     res.status(204).send();
   });
 
   // === Contracts (Verträge) ===
-  app.get("/api/contracts", isAuthenticated, async (req, res) => {
+  app.get("/api/contracts", async (req, res) => {
     const includeInactive = req.query.includeInactive === "true";
     const contracts = await storage.getContracts(includeInactive);
     res.json(contracts);
   });
 
   // Contract Suggestions routes MUST come before /:id routes to avoid routing conflict
-  app.get("/api/contracts/suggestions", isAuthenticated, async (req, res) => {
+  app.get("/api/contracts/suggestions", async (req, res) => {
     const status = req.query.status as "pending" | "accepted" | "dismissed" | undefined;
     const suggestions = await storage.getContractSuggestions(status);
     res.json(suggestions);
   });
 
-  app.post("/api/contracts/suggestions/run", isAuthenticated, async (req, res) => {
+  app.post("/api/contracts/suggestions/run", async (req, res) => {
     try {
       const { analyzeRecurringTransactions } = await import("./contractAnalyzer");
       await analyzeRecurringTransactions();
@@ -900,7 +892,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/contracts/suggestions/:id/accept", isAuthenticated, async (req, res) => {
+  app.post("/api/contracts/suggestions/:id/accept", async (req, res) => {
     try {
       const id = Number(req.params.id);
       const contract = await storage.acceptSuggestion(id);
@@ -910,13 +902,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/contracts/suggestions/:id/dismiss", isAuthenticated, async (req, res) => {
+  app.post("/api/contracts/suggestions/:id/dismiss", async (req, res) => {
     const id = Number(req.params.id);
     await storage.updateContractSuggestionStatus(id, "dismissed");
     res.status(204).send();
   });
 
-  app.get("/api/contracts/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/contracts/:id", async (req, res) => {
     const id = Number(req.params.id);
     const contract = await storage.getContract(id);
     if (!contract) {
@@ -925,7 +917,7 @@ export async function registerRoutes(
     res.json(contract);
   });
 
-  app.post("/api/contracts", isAuthenticated, async (req, res) => {
+  app.post("/api/contracts", async (req, res) => {
     try {
       const contractData = insertContractSchema.parse(req.body);
       const contract = await storage.createContract(contractData);
@@ -935,7 +927,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/contracts/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/contracts/:id", async (req, res) => {
     const id = Number(req.params.id);
     const updates = { ...req.body };
     if (updates.startDate) updates.startDate = new Date(updates.startDate);
@@ -945,14 +937,14 @@ export async function registerRoutes(
     res.json(contract);
   });
 
-  app.delete("/api/contracts/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/contracts/:id", async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteContract(id);
     res.status(204).send();
   });
 
   // Link matching transactions to a contract (based on amount AND counterparty similarity)
-  app.post("/api/contracts/:id/link-transactions", isAuthenticated, async (req, res) => {
+  app.post("/api/contracts/:id/link-transactions", async (req, res) => {
     try {
       const contractId = Number(req.params.id);
       const contract = await storage.getContract(contractId);
@@ -1014,7 +1006,7 @@ export async function registerRoutes(
   });
 
   // === AI Assistant ===
-  app.post("/api/assistant", isAuthenticated, async (req, res) => {
+  app.post("/api/assistant", async (req, res) => {
     let aborted = false;
     
     req.on("close", () => {

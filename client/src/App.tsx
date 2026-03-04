@@ -13,9 +13,6 @@ import Settings from "@/pages/Settings";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Contracts from "@/pages/Contracts";
-import Login from "@/pages/Login";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
 import { ChatWidget } from "@/components/ChatWidget";
 import { YearProvider, useYear } from "@/contexts/YearContext";
 
@@ -24,21 +21,7 @@ function ChatWidgetWithYear() {
   return <ChatWidget year={selectedYear} />;
 }
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
-
+function PageWithChat({ component: Component }: { component: React.ComponentType }) {
   return (
     <>
       <Component />
@@ -50,16 +33,15 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <ProtectedRoute component={Home} />} />
-      <Route path="/transactions" component={() => <ProtectedRoute component={Transactions} />} />
-      <Route path="/categories" component={() => <ProtectedRoute component={Categories} />} />
-      <Route path="/events" component={() => <ProtectedRoute component={Events} />} />
-      <Route path="/events/:id" component={() => <ProtectedRoute component={EventDetail} />} />
-      <Route path="/contracts" component={() => <ProtectedRoute component={Contracts} />} />
-      <Route path="/forecast" component={() => <ProtectedRoute component={Forecast} />} />
-      <Route path="/euer" component={() => <ProtectedRoute component={EuerReport} />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
-      <Route path="/login" component={Login} />
+      <Route path="/" component={() => <PageWithChat component={Home} />} />
+      <Route path="/transactions" component={() => <PageWithChat component={Transactions} />} />
+      <Route path="/categories" component={() => <PageWithChat component={Categories} />} />
+      <Route path="/events" component={() => <PageWithChat component={Events} />} />
+      <Route path="/events/:id" component={() => <PageWithChat component={EventDetail} />} />
+      <Route path="/contracts" component={() => <PageWithChat component={Contracts} />} />
+      <Route path="/forecast" component={() => <PageWithChat component={Forecast} />} />
+      <Route path="/euer" component={() => <PageWithChat component={EuerReport} />} />
+      <Route path="/settings" component={() => <PageWithChat component={Settings} />} />
       <Route component={NotFound} />
     </Switch>
   );
