@@ -1,14 +1,15 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  Receipt, 
-  Tags, 
-  TrendingUp, 
+import {
+  LayoutDashboard,
+  Receipt,
+  Tags,
+  TrendingUp,
   Menu,
   FileText,
   Settings,
   PartyPopper,
-  Repeat
+  Repeat,
+  BookOpen
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/contracts", icon: Repeat, label: "Verträge" },
     { href: "/events", icon: PartyPopper, label: "Veranstaltungen" },
     { href: "/euer", icon: FileText, label: "EÜR Bericht" },
+    { href: "/konten", icon: BookOpen, label: "Kontenübersicht" },
     { href: "/forecast", icon: TrendingUp, label: "Prognose" },
     { href: "/settings", icon: Settings, label: "Einstellungen" },
   ];

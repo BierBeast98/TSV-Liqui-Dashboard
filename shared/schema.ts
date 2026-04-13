@@ -162,6 +162,34 @@ export const insertEuerLineItemSchema = createInsertSchema(euerLineItems).omit({
 export type EuerLineItem = typeof euerLineItems.$inferSelect;
 export type InsertEuerLineItem = z.infer<typeof insertEuerLineItemSchema>;
 
+// === Summen- und Saldenliste (DATEV Kanzlei-Rechnungswesen) ===
+
+export const summenSaldenEntries = pgTable("summen_salden_entries", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  konto: text("konto").notNull(),           // e.g. "1600"
+  sub: text("sub").notNull().default("0"),   // sub-konto e.g. "0" or "1"
+  beschriftung: text("beschriftung").notNull(),
+  ebWert: real("eb_wert").default(0),        // Eröffnungsbilanz (Anfangsbestand)
+  ebSeite: text("eb_seite"),                 // "S" (Soll/Debit) | "H" (Haben/Credit) | null
+  kumSoll: real("kum_soll").default(0),      // Jahresumsatz kumuliert Soll
+  kumHaben: real("kum_haben").default(0),    // Jahresumsatz kumuliert Haben
+  saldo: real("saldo").default(0),           // Schlusssaldo (Endbestand)
+  saldoSeite: text("saldo_seite"),           // "S" | "H" | null (null = 0,00)
+});
+
+export const insertSummenSaldenEntrySchema = createInsertSchema(summenSaldenEntries).omit({ id: true });
+export type SummenSaldenEntry = typeof summenSaldenEntries.$inferSelect;
+export type InsertSummenSaldenEntry = z.infer<typeof insertSummenSaldenEntrySchema>;
+
+export interface LiquideMittelSummary {
+  year: number;
+  anfangsbestand: number;
+  endbestand: number;
+  veraenderung: number;
+  details: SummenSaldenEntry[];
+}
+
 // === Events / Veranstaltungen (for tracking income/expenses at festivals, etc.) ===
 
 export const events = pgTable("events", {

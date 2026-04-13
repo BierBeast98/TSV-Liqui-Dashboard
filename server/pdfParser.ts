@@ -117,7 +117,9 @@ Regeln:
 - Fehlende/leere Bereiche → 0 setzen, NICHT weglassen
 - confidence=high: alle 4 Bereiche gefunden, Werte plausibel
 - confidence=medium: 2-3 Bereiche gefunden
-- confidence=low: unklares Format oder weniger als 2 Bereiche`;
+- confidence=low: unklares Format oder weniger als 2 Bereiche
+- fiscalArea MUSS EXAKT einer dieser 4 Werte sein: "ideell", "vermoegensverwaltung", "zweckbetrieb", "wirtschaftlich"
+- NIEMALS "vermoegen" oder andere Abkürzungen verwenden — immer "vermoegensverwaltung"`;
 
 async function parseEuerWithClaude(text: string, year: number): Promise<ParseResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -137,7 +139,8 @@ async function parseEuerWithClaude(text: string, year: number): Promise<ParseRes
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4000,
+    max_tokens: 8096,
+    temperature: 0,
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -155,7 +158,21 @@ async function parseEuerWithClaude(text: string, year: number): Promise<ParseRes
     throw new Error('Kein JSON in Claude-Antwort gefunden');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    // Fallback: nur totals-Block extrahieren falls JSON durch Token-Limit abgeschnitten wurde
+    const totalsMatch = responseText.match(/"totals"\s*:\s*\{([^}]*)\}/);
+    const confidenceMatch = responseText.match(/"confidence"\s*:\s*"(\w+)"/);
+    if (!totalsMatch) throw new Error('JSON konnte nicht geparst werden und kein totals-Block gefunden');
+    parsed = {
+      confidence: confidenceMatch?.[1] ?? 'medium',
+      totals: JSON.parse(`{${totalsMatch[1]}}`),
+      lineItems: [],
+      warnings: ['JSON-Antwort war unvollständig (Token-Limit). Nur Summen wurden extrahiert.'],
+    };
+  }
 
   const totals: Partial<ExtractedTotals> = {
     ideellIncome: parsed.totals?.ideellIncome ?? 0,
@@ -361,6 +378,143 @@ function parseEuerWithRegex(text: string): ParseResult {
     isImageOnlyPdf: false,
     warnings,
   };
+}
+
+// ============================================================
+// Summen- und Saldenliste Parser
+// ============================================================
+
+export interface SummenSaldenLineEntry {
+  konto: string;
+  sub: string;
+  beschriftung: string;
+  ebWert: number;
+  ebSeite: 'S' | 'H' | null;
+  kumSoll: number;
+  kumHaben: number;
+  saldo: number;
+  saldoSeite: 'S' | 'H' | null;
+}
+
+export interface SummenSaldenResult {
+  success: boolean;
+  year: number;
+  entries: SummenSaldenLineEntry[];
+  warnings: string[];
+}
+
+// Konten der liquiden Mittel: Kasse (16xx) und Bank (18xx)
+const LIQUIDE_MITTEL_PREFIXES = ['16', '18'];
+
+function isLiquideMittel(konto: string): boolean {
+  return LIQUIDE_MITTEL_PREFIXES.some(p => konto.startsWith(p));
+}
+
+// pdf-parse liefert die Spalten GESPIEGELT: Zahlen kommen VOR der Kontonummer.
+// Format pro Zeile: [zahlen][S/H-Indikator(en)][konto][space][sub][space][beschriftung][trailing-zahl?]
+//
+// Beobachtete Positionen (EB=letzter Wert, Saldo je nach Anzahl Werte):
+//   n=2: [EB=Saldo, EB=Saldo]          → Saldo=idx 0
+//   n=3: [Saldo, kum-wert, EB]         → Saldo=idx 0
+//   n≥4: [..., Saldo at idx 2, ..., EB]→ Saldo=idx 2
+//
+// S/H-Indikatoren direkt vor der Kontonummer:
+//   2 Zeichen (SS/SH/HH/HS): Zeichen[0]=EB-Seite, Zeichen[1]=Saldo-Seite
+//   1 Zeichen (S/H): EB-Seite ODER Saldo-Seite (unterschieden via Saldo-Wert=0?)
+function parseSummenSaldenLine(line: string): SummenSaldenLineEntry | null {
+  // Suche: S/H-Indikatoren unmittelbar vor 3-4-stelliger Kontonummer
+  // Kein trailing \s+ nach Sub-Konto, da Beschriftung direkt folgt (z.B. "SS1600 0Kasse")
+  const acctRe = /([SH]{1,2})(\d{3,4})\s+(\d)/;
+  const acctMatch = line.match(acctRe);
+  if (!acctMatch) return null;
+
+  const sideIndicators = acctMatch[1];
+  // Führende Null für 3-stellige Konten (Klasse 0: "241" → "0241")
+  const konto = acctMatch[2].padStart(4, '0');
+  const sub = acctMatch[3];
+  const acctPos = acctMatch.index!;
+
+  // Zahlen VOR dem S/H+Konto-Muster extrahieren
+  const beforeSH = line.substring(0, acctPos);
+  const nums: number[] = [];
+  const numRe = /[\d.]+,\d{2}/g;
+  let m: RegExpExecArray | null;
+  while ((m = numRe.exec(beforeSH)) !== null) {
+    nums.push(parseGermanNumber(m[0]));
+  }
+
+  const n = nums.length;
+  if (n === 0) return null;
+
+  let ebWert = 0, ebSeite: 'S' | 'H' | null = null;
+  let saldo = 0, saldoSeite: 'S' | 'H' | null = null;
+
+  // Saldo-Position: Index 2 wenn n≥4, sonst Index 0 (letzter)
+  // EB immer letzter Wert (n-1)
+  // Empirisch verifiziert gegen DATEV SuSa: Saldo steht immer an 3. Stelle von rechts
+  const saldoIdx = n >= 4 ? 2 : 0;
+
+  if (sideIndicators.length === 2) {
+    // Beide Indikatoren bekannt: [0]=EB-Seite, [1]=Saldo-Seite
+    ebSeite = sideIndicators[0] as 'S' | 'H';
+    saldoSeite = sideIndicators[1] as 'S' | 'H';
+    ebWert = nums[n - 1];       // EB immer als letzter Wert
+    saldo = nums[saldoIdx];
+  } else {
+    // Nur 1 Indikator: kann EB-Seite oder Saldo-Seite sein
+    const candidate = nums[saldoIdx];
+    if (candidate === 0) {
+      // Saldo = 0 → Indikator gehört zum EB
+      ebSeite = sideIndicators[0] as 'S' | 'H';
+      ebWert = nums[n - 1];
+      saldo = 0;
+      saldoSeite = null;
+    } else {
+      // Saldo ≠ 0 → neues Konto ohne EB, Indikator gehört zum Saldo
+      saldoSeite = sideIndicators[0] as 'S' | 'H';
+      saldo = candidate;
+      ebWert = 0;
+      ebSeite = null;
+    }
+  }
+
+  // Beschriftung: alles nach Konto+Sub, ohne abschließende Zahl
+  const afterAcct = line.substring(acctPos + acctMatch[0].length);
+  const beschriftung = afterAcct.replace(/[\d.]+,\d{2}$/, '').replace(/\s+/g, ' ').trim();
+
+  return { konto, sub, beschriftung, ebWert, ebSeite, kumSoll: 0, kumHaben: 0, saldo, saldoSeite };
+}
+
+export async function parseSummenSaldenPdf(filePath: string, year: number): Promise<SummenSaldenResult> {
+  let text: string;
+  const warnings: string[] = [];
+  try {
+    text = await extractPdfText(filePath);
+  } catch (e) {
+    return { success: false, year, entries: [], warnings: ['PDF-Textextraktion fehlgeschlagen.'] };
+  }
+
+  // Formatprüfung
+  if (!text.includes('Summen und Salden') && !text.includes('Summen- und Saldenliste')) {
+    warnings.push('Datei scheint keine Summen-/Saldenliste zu sein — trotzdem geparst.');
+  }
+
+  const entries: SummenSaldenLineEntry[] = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    // Summenzeilen und Kopfzeilen überspringen
+    if (line.startsWith('Summe') || line.startsWith('KontoBeschriftung') || line.startsWith('Die Auswertung')) continue;
+    const entry = parseSummenSaldenLine(line);
+    if (entry) entries.push(entry);
+  }
+
+  if (entries.length === 0) {
+    warnings.push('Keine Kontenzeilen gefunden. Bitte Format prüfen.');
+    return { success: false, year, entries, warnings };
+  }
+
+  return { success: true, year, entries, warnings };
 }
 
 export async function parsePdf(filePath: string, year: number): Promise<ParseResult> {

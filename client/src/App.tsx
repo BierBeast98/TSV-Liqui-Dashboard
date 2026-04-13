@@ -9,6 +9,7 @@ import Transactions from "@/pages/Transactions";
 import Categories from "@/pages/Categories";
 import Forecast from "@/pages/Forecast";
 import EuerReport from "@/pages/EuerReport";
+import Kontenübersicht from "@/pages/Kontenübersicht";
 import Settings from "@/pages/Settings";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/contracts" component={() => <PageWithChat component={Contracts} />} />
       <Route path="/forecast" component={() => <PageWithChat component={Forecast} />} />
       <Route path="/euer" component={() => <PageWithChat component={EuerReport} />} />
+      <Route path="/konten" component={() => <PageWithChat component={Kontenübersicht} />} />
       <Route path="/settings" component={() => <PageWithChat component={Settings} />} />
       <Route component={NotFound} />
     </Switch>

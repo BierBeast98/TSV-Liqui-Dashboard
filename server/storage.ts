@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { 
+import {
   categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts, contractSuggestions,
+  summenSaldenEntries,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
@@ -11,7 +12,8 @@ import {
   type Event, type InsertEvent, type EventWithTotals,
   type EventEntry, type InsertEventEntry,
   type Contract, type InsertContract, type ContractWithCategory,
-  type ContractSuggestion, type InsertContractSuggestion, type ContractSuggestionWithDetails
+  type ContractSuggestion, type InsertContractSuggestion, type ContractSuggestionWithDetails,
+  type SummenSaldenEntry, type InsertSummenSaldenEntry, type LiquideMittelSummary
 } from "@shared/schema";
 import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { authStorage, type IAuthStorage } from "./replit_integrations/auth/storage";
@@ -80,6 +82,13 @@ export interface IStorage extends IAuthStorage {
   getEuerLineItemsByArea(reportId: number, fiscalArea: string): Promise<EuerLineItem[]>;
   upsertEuerLineItems(reportId: number, items: Omit<InsertEuerLineItem, 'reportId'>[]): Promise<EuerLineItem[]>;
   
+  // Summen- und Saldenliste
+  upsertSummenSalden(year: number, entries: InsertSummenSaldenEntry[]): Promise<SummenSaldenEntry[]>;
+  getSummenSalden(year: number): Promise<SummenSaldenEntry[]>;
+  getSummenSaldenYears(): Promise<number[]>;
+  getLiquideMittel(year: number): Promise<LiquideMittelSummary>;
+  deleteSummenSalden(year: number): Promise<void>;
+
   // Events / Veranstaltungen
   getEvents(): Promise<EventWithTotals[]>;
   getEvent(id: number): Promise<Event | undefined>;
@@ -835,6 +844,48 @@ export class DatabaseStorage implements IStorage {
     // Insert new items
     const toInsert = items.map(item => ({ ...item, reportId }));
     return await db.insert(euerLineItems).values(toInsert).returning();
+  }
+
+  // Summen- und Saldenliste
+  async upsertSummenSalden(year: number, entries: InsertSummenSaldenEntry[]): Promise<SummenSaldenEntry[]> {
+    await db.delete(summenSaldenEntries).where(eq(summenSaldenEntries.year, year));
+    if (entries.length === 0) return [];
+    return await db.insert(summenSaldenEntries).values(entries).returning();
+  }
+
+  async getSummenSalden(year: number): Promise<SummenSaldenEntry[]> {
+    return await db.select().from(summenSaldenEntries)
+      .where(eq(summenSaldenEntries.year, year))
+      .orderBy(asc(summenSaldenEntries.konto), asc(summenSaldenEntries.sub));
+  }
+
+  async getSummenSaldenYears(): Promise<number[]> {
+    const rows = await db.selectDistinct({ year: summenSaldenEntries.year })
+      .from(summenSaldenEntries)
+      .orderBy(desc(summenSaldenEntries.year));
+    return rows.map(r => r.year);
+  }
+
+  async getLiquideMittel(year: number): Promise<LiquideMittelSummary> {
+    const all = await this.getSummenSalden(year);
+    // Liquide Mittel: Kasse (16xx) + Bank (18xx)
+    const details = all.filter(e => e.konto.startsWith('16') || e.konto.startsWith('18'));
+
+    const anfangsbestand = details.reduce((sum, e) => {
+      const val = e.ebWert ?? 0;
+      return sum + (e.ebSeite === 'S' ? val : e.ebSeite === 'H' ? -val : 0);
+    }, 0);
+
+    const endbestand = details.reduce((sum, e) => {
+      const val = e.saldo ?? 0;
+      return sum + (e.saldoSeite === 'S' ? val : e.saldoSeite === 'H' ? -val : 0);
+    }, 0);
+
+    return { year, anfangsbestand, endbestand, veraenderung: endbestand - anfangsbestand, details };
+  }
+
+  async deleteSummenSalden(year: number): Promise<void> {
+    await db.delete(summenSaldenEntries).where(eq(summenSaldenEntries.year, year));
   }
 
   // Events / Veranstaltungen

@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 import iconv from "iconv-lite";
 import { processAssistantQuery } from "./assistant";
-import { parsePdf } from "./pdfParser";
+import { parsePdf, parseSummenSaldenPdf } from "./pdfParser";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -41,6 +41,26 @@ const pdfUpload = multer({
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Multer für Summen-/Saldenliste PDFs
+const sumSalStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(process.cwd(), 'uploads', 'summen-salden');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const year = req.params.year || 'unknown';
+    cb(null, `sumsaldo_${year}_${Date.now()}.pdf`);
+  }
+});
+const sumSalUpload = multer({
+  storage: sumSalStorage,
+  fileFilter: (req, file, cb) => {
+    file.mimetype === 'application/pdf' ? cb(null, true) : cb(new Error('Nur PDF-Dateien erlaubt'));
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 export async function registerRoutes(
@@ -716,6 +736,59 @@ export async function registerRoutes(
     const items = req.body.items || [];
     const saved = await storage.upsertEuerLineItems(report.id, items);
     res.json(saved);
+  });
+
+  // ── Summen- und Saldenliste ────────────────────────────────────────────────
+
+  app.post("/api/summen-salden/:year/upload-pdf", sumSalUpload.single('pdf'), async (req, res) => {
+    try {
+      const year = Number(req.params.year);
+      if (isNaN(year) || year < 2000 || year > 2100) return res.status(400).json({ message: "Ungültiges Jahr" });
+      if (!req.file) return res.status(400).json({ message: "Keine PDF-Datei hochgeladen" });
+
+      const result = await parseSummenSaldenPdf(req.file.path, year);
+      if (!result.success || result.entries.length === 0) {
+        return res.status(422).json({ message: "PDF konnte nicht geparst werden.", warnings: result.warnings });
+      }
+
+      const toInsert = result.entries.map(e => ({ ...e, year }));
+      const saved = await storage.upsertSummenSalden(year, toInsert);
+      const liquide = await storage.getLiquideMittel(year);
+
+      res.json({
+        message: `${saved.length} Konten importiert`,
+        year,
+        count: saved.length,
+        warnings: result.warnings,
+        liquideMittel: liquide,
+      });
+    } catch (e) {
+      console.error('[routes] Summen-Salden Upload Fehler:', e);
+      res.status(500).json({ message: "Fehler beim Hochladen" });
+    }
+  });
+
+  app.get("/api/summen-salden/years", async (req, res) => {
+    const years = await storage.getSummenSaldenYears();
+    res.json(years);
+  });
+
+  app.get("/api/summen-salden/:year", async (req, res) => {
+    const year = Number(req.params.year);
+    const entries = await storage.getSummenSalden(year);
+    res.json(entries);
+  });
+
+  app.get("/api/summen-salden/:year/liquide-mittel", async (req, res) => {
+    const year = Number(req.params.year);
+    const result = await storage.getLiquideMittel(year);
+    res.json(result);
+  });
+
+  app.delete("/api/summen-salden/:year", async (req, res) => {
+    const year = Number(req.params.year);
+    await storage.deleteSummenSalden(year);
+    res.json({ message: "Gelöscht" });
   });
 
   // EÜR endpoint - PDF-based with transaction fallback

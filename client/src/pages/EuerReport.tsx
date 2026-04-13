@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight, Upload, ExternalLink, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight, Upload, ExternalLink, Sparkles, CheckCircle, AlertCircle, Landmark, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/utils";
@@ -90,6 +90,7 @@ export default function EuerReport() {
   const [selectedArea, setSelectedArea] = useState<FiscalAreaSummary | null>(null);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
   const [showExtractionPreview, setShowExtractionPreview] = useState(false);
+  const [showLiquidDetails, setShowLiquidDetails] = useState(false);
   const { toast } = useToast();
 
   const { data: report, isLoading } = useQuery<FiscalAreaReport>({
@@ -109,6 +110,33 @@ export default function EuerReport() {
       return res.json();
     },
     enabled: !!selectedArea
+  });
+
+  const { data: liquideMittel, refetch: refetchLiquid } = useQuery<{
+    year: number; anfangsbestand: number; endbestand: number; veraenderung: number;
+    details: { konto: string; sub: string; beschriftung: string; ebWert: number; ebSeite: string | null; saldo: number; saldoSeite: string | null }[];
+  }>({
+    queryKey: ['/api/summen-salden', year, 'liquide-mittel'],
+    queryFn: async () => {
+      const res = await fetch(`/api/summen-salden/${year}/liquide-mittel`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const sumSaldenUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append('pdf', file);
+      const res = await fetch(`/api/summen-salden/${year}/upload-pdf`, { method: 'POST', body: fd });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message || 'Upload fehlgeschlagen'); }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      refetchLiquid();
+      toast({ title: 'Summen-/Saldenliste importiert', description: data.message });
+    },
+    onError: (e: Error) => toast({ title: 'Fehler', description: e.message, variant: 'destructive' }),
   });
 
   const [formData, setFormData] = useState<EuerFormData>({
@@ -185,7 +213,7 @@ export default function EuerReport() {
     }
   };
 
-  const applyExtractedValues = (result: ExtractionResult) => {
+  const applyExtractedValues = async (result: ExtractionResult) => {
     const t = result.totals;
     setFormData(prev => ({
       ...prev,
@@ -198,6 +226,20 @@ export default function EuerReport() {
       wirtschaftlichIncome: t.wirtschaftlichIncome ?? prev.wirtschaftlichIncome,
       wirtschaftlichExpenses: t.wirtschaftlichExpenses ?? prev.wirtschaftlichExpenses,
     }));
+
+    if (result.lineItems && result.lineItems.length > 0) {
+      try {
+        await fetch(`/api/euer-reports/${year}/items`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: result.lineItems }),
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/euer-reports', year, 'items'], exact: false });
+      } catch (e) {
+        console.error('Fehler beim Speichern der Einzelpositionen:', e);
+      }
+    }
+
     setShowExtractionPreview(false);
     setIsEditing(true);
   };
@@ -687,6 +729,97 @@ export default function EuerReport() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Liquide Mittel (aus Summen-/Saldenliste) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Landmark className="w-5 h-5" />
+                    Liquide Mittel {year}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {liquideMittel && liquideMittel.details?.length > 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => setShowLiquidDetails(v => !v)}>
+                        <ChevronDown className={`w-4 h-4 mr-1 transition-transform ${showLiquidDetails ? 'rotate-180' : ''}`} />
+                        {showLiquidDetails ? 'Weniger' : 'Details'}
+                      </Button>
+                    )}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) sumSaldenUploadMutation.mutate(f); e.target.value = ''; }}
+                      />
+                      <Button variant="outline" size="sm" asChild disabled={sumSaldenUploadMutation.isPending}>
+                        <span>
+                          {sumSaldenUploadMutation.isPending
+                            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            : <Upload className="w-4 h-4 mr-2" />}
+                          Summen-/Saldenliste
+                        </span>
+                      </Button>
+                    </label>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Kassen- und Bankkonten (1600–1860) aus der DATEV Summen-/Saldenliste
+                </p>
+              </CardHeader>
+              <CardContent>
+                {!liquideMittel || liquideMittel.details?.length === 0 ? (
+                  <div className="py-6 text-center text-muted-foreground text-sm">
+                    Noch keine Summen-/Saldenliste für {year} hochgeladen.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <div className="text-xs text-muted-foreground mb-1">Anfangsbestand 01.01.</div>
+                        <div className="text-xl font-bold">{formatCurrency(liquideMittel.anfangsbestand)}</div>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50">
+                        <div className="text-xs text-muted-foreground mb-1">Endbestand 31.12.</div>
+                        <div className="text-xl font-bold">{formatCurrency(liquideMittel.endbestand)}</div>
+                      </div>
+                      <div className={`p-3 rounded-lg ${liquideMittel.veraenderung >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                        <div className="text-xs text-muted-foreground mb-1">Veränderung</div>
+                        <div className={`text-xl font-bold flex items-center justify-center gap-1 ${liquideMittel.veraenderung >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {liquideMittel.veraenderung >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                          {formatCurrency(liquideMittel.veraenderung)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {showLiquidDetails && (
+                      <div className="rounded-lg border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Konto</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Bezeichnung</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Anfang</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Ende</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {liquideMittel.details.map((d, i) => (
+                              <tr key={i} className="hover:bg-muted/30">
+                                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{d.konto}{d.sub !== '0' ? `.${d.sub}` : ''}</td>
+                                <td className="px-3 py-2">{d.beschriftung}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(d.ebWert ?? 0)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(d.saldo ?? 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </>
