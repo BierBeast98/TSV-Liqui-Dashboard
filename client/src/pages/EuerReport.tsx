@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight, Upload, ExternalLink } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, FileText, Save, Edit2, ChevronRight, Upload, ExternalLink, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -62,11 +64,32 @@ interface EuerLineItem {
   amount: number;
 }
 
+interface ExtractedLineItem {
+  fiscalArea: string;
+  type: 'income' | 'expense';
+  accountNumber?: string;
+  description: string;
+  amount: number;
+}
+
+interface ExtractionResult {
+  success: boolean;
+  method: 'claude' | 'regex' | 'none';
+  confidence: 'high' | 'medium' | 'low';
+  totals: Partial<EuerFormData>;
+  lineItems: ExtractedLineItem[];
+  rawTextSnippet: string;
+  isImageOnlyPdf: boolean;
+  warnings: string[];
+}
+
 export default function EuerReport() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear - 1); // Default to previous year for EÜR
   const [isEditing, setIsEditing] = useState(false);
   const [selectedArea, setSelectedArea] = useState<FiscalAreaSummary | null>(null);
+  const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
+  const [showExtractionPreview, setShowExtractionPreview] = useState(false);
   const { toast } = useToast();
 
   const { data: report, isLoading } = useQuery<FiscalAreaReport>({
@@ -129,9 +152,22 @@ export default function EuerReport() {
       }
       return res.json();
     },
-    onSuccess: (data) => {
-      toast({ title: "PDF hochgeladen", description: data.message });
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/report/euer', year] });
+      const extracted: ExtractionResult | null = data.extractedData ?? null;
+      if (extracted?.isImageOnlyPdf) {
+        toast({
+          title: 'Bild-PDF erkannt',
+          description: 'Das PDF enthält keinen lesbaren Text. Bitte Werte manuell eintragen.',
+          variant: 'destructive',
+        });
+      } else if (extracted?.success) {
+        setExtractionResult(extracted);
+        setShowExtractionPreview(true);
+        toast({ title: 'PDF analysiert', description: data.message });
+      } else {
+        toast({ title: 'PDF hochgeladen', description: data.message ?? 'Bitte Werte manuell eintragen.' });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Fehler", description: error.message, variant: "destructive" });
@@ -147,6 +183,23 @@ export default function EuerReport() {
       }
       uploadMutation.mutate(file);
     }
+  };
+
+  const applyExtractedValues = (result: ExtractionResult) => {
+    const t = result.totals;
+    setFormData(prev => ({
+      ...prev,
+      ideellIncome: t.ideellIncome ?? prev.ideellIncome,
+      ideellExpenses: t.ideellExpenses ?? prev.ideellExpenses,
+      vermoegenIncome: t.vermoegenIncome ?? prev.vermoegenIncome,
+      vermoegenExpenses: t.vermoegenExpenses ?? prev.vermoegenExpenses,
+      zweckbetriebIncome: t.zweckbetriebIncome ?? prev.zweckbetriebIncome,
+      zweckbetriebExpenses: t.zweckbetriebExpenses ?? prev.zweckbetriebExpenses,
+      wirtschaftlichIncome: t.wirtschaftlichIncome ?? prev.wirtschaftlichIncome,
+      wirtschaftlichExpenses: t.wirtschaftlichExpenses ?? prev.wirtschaftlichExpenses,
+    }));
+    setShowExtractionPreview(false);
+    setIsEditing(true);
   };
 
   const startEditing = () => {
@@ -405,6 +458,85 @@ export default function EuerReport() {
             </Button>
           </div>
         </div>
+
+        {showExtractionPreview && extractionResult && (
+          <Card className="border-2 border-primary/30 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between gap-2 text-base flex-wrap">
+                <span className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  Automatisch erkannte Werte
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant={
+                      extractionResult.confidence === 'high' ? 'default'
+                      : extractionResult.confidence === 'medium' ? 'secondary'
+                      : 'destructive'
+                    }
+                  >
+                    {extractionResult.confidence === 'high' && 'Konfidenz: Hoch'}
+                    {extractionResult.confidence === 'medium' && 'Konfidenz: Mittel'}
+                    {extractionResult.confidence === 'low' && 'Konfidenz: Niedrig'}
+                  </Badge>
+                  <Badge variant="outline">
+                    {extractionResult.method === 'claude' ? 'KI-Analyse' : 'Regex-Analyse'}
+                  </Badge>
+                </div>
+              </CardTitle>
+              {extractionResult.lineItems.length > 0 && (
+                <CardDescription>
+                  {extractionResult.lineItems.length} Einzelpositionen erkannt
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {extractionResult.warnings.length > 0 && (
+                <Alert variant={extractionResult.confidence === 'low' ? 'destructive' : 'default'}>
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertTitle>Hinweise</AlertTitle>
+                  <AlertDescription>
+                    <ul className="list-disc list-inside space-y-1">
+                      {extractionResult.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: 'A. Ideell', income: extractionResult.totals.ideellIncome, expenses: extractionResult.totals.ideellExpenses },
+                  { label: 'B. Vermögen', income: extractionResult.totals.vermoegenIncome, expenses: extractionResult.totals.vermoegenExpenses },
+                  { label: 'C. Zweckbetrieb', income: extractionResult.totals.zweckbetriebIncome, expenses: extractionResult.totals.zweckbetriebExpenses },
+                  { label: 'D. Wirtschaftlich', income: extractionResult.totals.wirtschaftlichIncome, expenses: extractionResult.totals.wirtschaftlichExpenses },
+                ].map(area => (
+                  <div key={area.label} className="p-3 rounded-lg border bg-background">
+                    <div className="font-medium text-xs text-muted-foreground mb-2">{area.label}</div>
+                    <div className="flex justify-between text-xs gap-2">
+                      <span className="text-green-700 dark:text-green-400">+{formatCurrency(area.income ?? 0)}</span>
+                      <span className="text-red-700 dark:text-red-400">-{formatCurrency(area.expenses ?? 0)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2 flex-wrap">
+                <Button onClick={() => applyExtractedValues(extractionResult)}>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Werte übernehmen & bearbeiten
+                </Button>
+                <Button variant="outline" onClick={() => { setShowExtractionPreview(false); setIsEditing(true); }}>
+                  Manuell eingeben
+                </Button>
+                <Button variant="ghost" onClick={() => setShowExtractionPreview(false)} className="ml-auto">
+                  Schließen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {!hasData ? (
           <Card>

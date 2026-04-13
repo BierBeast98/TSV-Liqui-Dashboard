@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs";
 import iconv from "iconv-lite";
 import { processAssistantQuery } from "./assistant";
+import { parsePdf } from "./pdfParser";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -619,37 +620,17 @@ export async function registerRoutes(
       if (isNaN(year) || year < 2000 || year > 2100) {
         return res.status(400).json({ message: "Ungültiges Jahr" });
       }
-      
+
       if (!req.file) {
         return res.status(400).json({ message: "Keine PDF-Datei hochgeladen" });
       }
-      
+
       const uploadedBy = 'admin';
-      
-      // Check if report already exists
       const existingReport = await storage.getEuerReport(year);
-      
-      if (existingReport) {
-        // Update existing report with new file info
-        const updated = await storage.upsertEuerReport({
-          ...existingReport,
-          year,
-          sourceFileName: req.file.originalname,
-          pdfFilePath: req.file.path,
-          uploadedBy,
-        });
-        res.json({ 
-          message: "PDF hochgeladen und Bericht aktualisiert", 
-          report: updated,
-          fileName: req.file.originalname 
-        });
-      } else {
-        // Create new report entry with PDF
-        const report = await storage.upsertEuerReport({
-          year,
-          sourceFileName: req.file.originalname,
-          pdfFilePath: req.file.path,
-          uploadedBy,
+
+      // Speichere/aktualisiere den Bericht mit der neuen PDF-Datei
+      const savedReport = await storage.upsertEuerReport({
+        ...(existingReport ?? {
           ideellIncome: 0,
           ideellExpenses: 0,
           vermoegenIncome: 0,
@@ -658,13 +639,32 @@ export async function registerRoutes(
           zweckbetriebExpenses: 0,
           wirtschaftlichIncome: 0,
           wirtschaftlichExpenses: 0,
-        });
-        res.json({ 
-          message: "PDF hochgeladen. Bitte die Werte jetzt manuell eintragen.", 
-          report,
-          fileName: req.file.originalname 
-        });
+        }),
+        year,
+        sourceFileName: req.file.originalname,
+        pdfFilePath: req.file.path,
+        uploadedBy,
+      });
+
+      // PDF automatisch parsen (Claude → Regex-Fallback)
+      let extractedData = null;
+      try {
+        extractedData = await parsePdf(req.file.path, year);
+      } catch (e) {
+        console.error('[routes] PDF-Parsing fehlgeschlagen:', e);
       }
+
+      const itemCount = extractedData?.lineItems?.length ?? 0;
+      const message = extractedData?.success
+        ? `PDF analysiert: ${itemCount} Positionen erkannt (${extractedData.method === 'claude' ? 'KI' : 'Regex'})`
+        : 'PDF hochgeladen. Bitte die Werte manuell eintragen.';
+
+      res.json({
+        message,
+        report: savedReport,
+        fileName: req.file.originalname,
+        extractedData,
+      });
     } catch (e) {
       console.error("Error uploading PDF:", e);
       res.status(500).json({ message: "Fehler beim Hochladen" });

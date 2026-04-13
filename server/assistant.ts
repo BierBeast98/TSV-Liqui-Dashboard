@@ -2,10 +2,13 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import type { Transaction } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let openai: OpenAI | null = null;
+if (process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+  openai = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  });
+}
 
 interface AssistantRequest {
   message: string;
@@ -154,6 +157,10 @@ ${context}
 ${additionalContext ? `\nSPEZIFISCHE ANALYSE:\n${additionalContext}` : ''}`;
 
   async function* generateResponse(): AsyncGenerator<string> {
+    if (!openai) {
+      yield "KI-Assistent nicht verfügbar (kein API-Key konfiguriert).";
+      return;
+    }
     const stream = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
