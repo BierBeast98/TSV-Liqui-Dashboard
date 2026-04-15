@@ -185,10 +185,17 @@ async function parseEuerWithClaude(text: string, year: number): Promise<ParseRes
     wirtschaftlichExpenses: parsed.totals?.wirtschaftlichExpenses ?? 0,
   };
 
+  const normalizeFiscalArea = (raw: string): FiscalAreaKey => {
+    const lower = (raw || '').toLowerCase().trim();
+    if (lower.startsWith('vermog') || lower.startsWith('vermögen')) return 'vermoegensverwaltung';
+    if (['ideell', 'vermoegensverwaltung', 'zweckbetrieb', 'wirtschaftlich'].includes(lower)) return lower as FiscalAreaKey;
+    return lower as FiscalAreaKey;
+  };
+
   const lineItems: ExtractedLineItem[] = (parsed.lineItems ?? [])
     .filter((item: any) => item && item.description && typeof item.amount === 'number')
     .map((item: any) => ({
-      fiscalArea: item.fiscalArea as FiscalAreaKey,
+      fiscalArea: normalizeFiscalArea(item.fiscalArea),
       type: item.type as 'income' | 'expense',
       accountNumber: item.accountNumber?.toString(),
       description: item.description,

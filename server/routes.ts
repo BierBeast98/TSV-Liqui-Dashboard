@@ -106,6 +106,68 @@ export async function registerRoutes(
     res.json(accs);
   });
 
+  app.post("/api/accounts/import-from-summen-salden", async (req, res) => {
+    try {
+      const { year } = req.body;
+      if (!year) return res.status(400).json({ message: "year erforderlich" });
+      const result = await storage.importAccountsFromSummenSalden(Number(year));
+      res.json(result);
+    } catch (e) {
+      console.error("Error importing accounts:", e);
+      res.status(500).json({ message: "Fehler beim Importieren" });
+    }
+  });
+
+  app.patch("/api/accounts/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { datevKonto } = req.body;
+      const account = await storage.updateAccount(id, { datevKonto: datevKonto || null });
+      res.json(account);
+    } catch (e) {
+      console.error("Error updating account:", e);
+      res.status(500).json({ message: "Fehler beim Aktualisieren des Kontos" });
+    }
+  });
+
+  app.patch("/api/accounts/:id/rename", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { name } = req.body;
+      if (!name?.trim()) return res.status(400).json({ message: "Name darf nicht leer sein" });
+      const account = await storage.renameAccount(id, name.trim());
+      res.json(account);
+    } catch (e) {
+      console.error("Error renaming account:", e);
+      res.status(500).json({ message: "Fehler beim Umbenennen" });
+    }
+  });
+
+  app.post("/api/accounts/:sourceId/merge", async (req, res) => {
+    try {
+      const sourceId = Number(req.params.sourceId);
+      const { targetId } = req.body;
+      if (!targetId) return res.status(400).json({ message: "targetId erforderlich" });
+      if (sourceId === Number(targetId)) return res.status(400).json({ message: "Quelle und Ziel dürfen nicht gleich sein" });
+      await storage.mergeAccount(sourceId, Number(targetId));
+      res.json({ message: "Konten zusammengeführt" });
+    } catch (e) {
+      console.error("Error merging accounts:", e);
+      res.status(500).json({ message: "Fehler beim Zusammenführen" });
+    }
+  });
+
+  app.delete("/api/accounts/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      await storage.deleteAccount(id);
+      res.status(204).send();
+    } catch (e: any) {
+      const msg = e?.message || "Fehler beim Löschen";
+      res.status(400).json({ message: msg });
+    }
+  });
+
   // === Account Balances (Opening balances per year) ===
   app.get("/api/account-balances/:year", async (req, res) => {
     const year = Number(req.params.year);
@@ -128,6 +190,20 @@ export async function registerRoutes(
     } catch (e) {
       console.error("Error upserting account balance:", e);
       res.status(500).json({ message: "Fehler beim Speichern des Anfangssaldos" });
+    }
+  });
+
+  app.post("/api/account-balances/sync-from-summen-salden", async (req, res) => {
+    try {
+      const { sourceYear, targetYear, previewOnly } = req.body;
+      if (!sourceYear || !targetYear) {
+        return res.status(400).json({ message: "sourceYear und targetYear erforderlich" });
+      }
+      const result = await storage.syncFromSummenSalden(Number(sourceYear), Number(targetYear), !!previewOnly);
+      res.json(result);
+    } catch (e) {
+      console.error("Error syncing from Summen-/Saldenliste:", e);
+      res.status(500).json({ message: "Fehler bei der Synchronisierung" });
     }
   });
 
@@ -811,7 +887,7 @@ export async function registerRoutes(
         ],
         totalIncome: (pdfReport.ideellIncome || 0) + (pdfReport.vermoegenIncome || 0) + (pdfReport.zweckbetriebIncome || 0) + (pdfReport.wirtschaftlichIncome || 0),
         totalExpenses: (pdfReport.ideellExpenses || 0) + (pdfReport.vermoegenExpenses || 0) + (pdfReport.zweckbetriebExpenses || 0) + (pdfReport.wirtschaftlichExpenses || 0),
-        totalNet: 0,
+        totalNet: ((pdfReport.ideellIncome || 0) + (pdfReport.vermoegenIncome || 0) + (pdfReport.zweckbetriebIncome || 0) + (pdfReport.wirtschaftlichIncome || 0)) - ((pdfReport.ideellExpenses || 0) + (pdfReport.vermoegenExpenses || 0) + (pdfReport.zweckbetriebExpenses || 0) + (pdfReport.wirtschaftlichExpenses || 0)),
       });
     } else {
       // Fallback to transaction-calculated data

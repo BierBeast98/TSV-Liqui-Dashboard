@@ -14,6 +14,7 @@ import Settings from "@/pages/Settings";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Contracts from "@/pages/Contracts";
+import Kassenbericht from "@/pages/Kassenbericht";
 import { ChatWidget } from "@/components/ChatWidget";
 import { YearProvider, useYear } from "@/contexts/YearContext";
 
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/contracts" component={() => <PageWithChat component={Contracts} />} />
       <Route path="/forecast" component={() => <PageWithChat component={Forecast} />} />
       <Route path="/euer" component={() => <PageWithChat component={EuerReport} />} />
+      <Route path="/kassenbericht" component={() => <PageWithChat component={Kassenbericht} />} />
       <Route path="/konten" component={() => <PageWithChat component={Kontenübersicht} />} />
       <Route path="/settings" component={() => <PageWithChat component={Settings} />} />
       <Route component={NotFound} />

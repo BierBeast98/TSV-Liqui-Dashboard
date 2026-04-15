@@ -5,7 +5,7 @@ import {
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
-  type Account, type TransactionResponse, type TransactionWithDetails,
+  type Account, type AccountWithTxCount, type TransactionResponse, type TransactionWithDetails,
   type AccountBalance, type InsertAccountBalance,
   type EuerReport, type InsertEuerReport,
   type EuerLineItem, type InsertEuerLineItem,
@@ -230,13 +230,114 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getAccounts(): Promise<Account[]> {
-    return await db.select().from(accounts).orderBy(accounts.name);
+  async getAccounts(): Promise<AccountWithTxCount[]> {
+    const rows = await db
+      .select({
+        id: accounts.id,
+        iban: accounts.iban,
+        name: accounts.name,
+        datevKonto: accounts.datevKonto,
+        createdAt: accounts.createdAt,
+        txCount: sql<number>`CAST(COUNT(${transactions.id}) AS INTEGER)`,
+      })
+      .from(accounts)
+      .leftJoin(transactions, eq(transactions.accountId, accounts.id))
+      .groupBy(accounts.id)
+      .orderBy(accounts.name);
+    return rows;
+  }
+
+  async importAccountsFromSummenSalden(year: number): Promise<{ created: Account[]; skipped: string[] }> {
+    const entries = await this.getSummenSalden(year);
+    // Only bank accounts (18xx) — skip Kassen (16xx)
+    const bankEntries = entries.filter(e => e.konto.startsWith('18'));
+
+    const created: Account[] = [];
+    const skipped: string[] = [];
+
+    for (const entry of bankEntries) {
+      const datevKonto = entry.sub !== '0' ? `${entry.konto}.${entry.sub}` : entry.konto;
+      const iban = `DATEV-${datevKonto}`;
+
+      // Check if account already exists (by IBAN or datevKonto)
+      const [existingByIban] = await db.select().from(accounts).where(eq(accounts.iban, iban));
+      if (existingByIban) { skipped.push(`${datevKonto}: ${entry.beschriftung} (bereits vorhanden)`); continue; }
+
+      const allAccounts = await db.select().from(accounts);
+      const existingByKonto = allAccounts.find(a => a.datevKonto === datevKonto);
+      if (existingByKonto) { skipped.push(`${datevKonto}: ${entry.beschriftung} (DATEV-Konto bereits zugeordnet)`); continue; }
+
+      const [newAccount] = await db.insert(accounts).values({
+        iban,
+        name: entry.beschriftung,
+        datevKonto,
+      }).returning();
+      created.push(newAccount);
+    }
+
+    return { created, skipped };
   }
 
   async getAccountByIban(iban: string): Promise<Account | undefined> {
     const [account] = await db.select().from(accounts).where(eq(accounts.iban, iban));
     return account;
+  }
+
+  async updateAccount(id: number, patch: { datevKonto?: string | null }): Promise<Account> {
+    const [updated] = await db.update(accounts)
+      .set({ datevKonto: patch.datevKonto })
+      .where(eq(accounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async renameAccount(id: number, name: string): Promise<Account> {
+    const [updated] = await db.update(accounts)
+      .set({ name })
+      .where(eq(accounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAccount(id: number): Promise<void> {
+    const [{ count }] = await db
+      .select({ count: sql<number>`CAST(COUNT(${transactions.id}) AS INTEGER)` })
+      .from(transactions)
+      .where(eq(transactions.accountId, id));
+    if (count > 0) throw new Error(`Konto hat noch ${count} Buchungen`);
+    await db.delete(accountBalances).where(eq(accountBalances.accountId, id));
+    await db.delete(accounts).where(eq(accounts.id, id));
+  }
+
+  async mergeAccount(sourceId: number, targetId: number): Promise<void> {
+    // 1. Move transactions
+    await db.update(transactions)
+      .set({ accountId: targetId })
+      .where(eq(transactions.accountId, sourceId));
+
+    // 2. Move/merge opening balances
+    const sourceBalances = await db.select().from(accountBalances)
+      .where(eq(accountBalances.accountId, sourceId));
+    for (const sb of sourceBalances) {
+      const [existing] = await db.select().from(accountBalances)
+        .where(and(eq(accountBalances.accountId, targetId), eq(accountBalances.year, sb.year)));
+      if (existing) {
+        await db.update(accountBalances)
+          .set({ openingBalance: existing.openingBalance + sb.openingBalance })
+          .where(eq(accountBalances.id, existing.id));
+      } else {
+        await db.insert(accountBalances).values({ accountId: targetId, year: sb.year, openingBalance: sb.openingBalance });
+      }
+    }
+    await db.delete(accountBalances).where(eq(accountBalances.accountId, sourceId));
+
+    // 3. Move contract suggestions
+    await db.update(contractSuggestions)
+      .set({ accountId: targetId })
+      .where(eq(contractSuggestions.accountId, sourceId));
+
+    // 4. Delete source account
+    await db.delete(accounts).where(eq(accounts.id, sourceId));
   }
 
   async getOrCreateAccount(iban: string, name?: string): Promise<Account> {
@@ -288,7 +389,40 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getTransactions(params?: { 
+  async syncFromSummenSalden(sourceYear: number, targetYear: number, previewOnly = false): Promise<{
+    synced: { accountId: number; accountName: string; datevKonto: string; amount: number }[];
+    skipped: { accountName: string; reason: string }[];
+  }> {
+    const allAccounts = await this.getAccounts();
+    const mappedAccounts = allAccounts.filter(a => a.datevKonto);
+    const entries = await this.getSummenSalden(sourceYear);
+
+    const synced: { accountId: number; accountName: string; datevKonto: string; amount: number }[] = [];
+    const skipped: { accountName: string; reason: string }[] = [];
+
+    for (const account of mappedAccounts) {
+      const datevKonto = account.datevKonto!;
+      // Support "1840.1" notation for sub-accounts
+      const [konto, sub = "0"] = datevKonto.split(".");
+      const entry = entries.find(e => e.konto === konto && e.sub === sub);
+      if (!entry) {
+        skipped.push({ accountName: account.name, reason: `Konto ${datevKonto} nicht in Saldenliste ${sourceYear}` });
+        continue;
+      }
+      // Sign: S = Aktivkonto (positive), H = Passivkonto (negative), null = 0
+      const amount = entry.saldo != null
+        ? (entry.saldoSeite === "S" ? entry.saldo : entry.saldoSeite === "H" ? -entry.saldo : 0)
+        : 0;
+      if (!previewOnly) {
+        await this.upsertAccountBalance({ accountId: account.id, year: targetYear, openingBalance: amount });
+      }
+      synced.push({ accountId: account.id, accountName: account.name, datevKonto, amount });
+    }
+
+    return { synced, skipped };
+  }
+
+  async getTransactions(params?: {
     year?: number;
     years?: number[];  // Multiple years support
     categoryId?: number;

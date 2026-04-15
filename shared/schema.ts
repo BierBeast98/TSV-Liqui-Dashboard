@@ -20,6 +20,7 @@ export const accounts = pgTable("accounts", {
   id: serial("id").primaryKey(),
   iban: text("iban").notNull().unique(),
   name: text("name").notNull(),
+  datevKonto: text("datev_konto"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -56,6 +57,7 @@ export const insertTransactionSchema = createInsertSchema(transactions, {
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Account = typeof accounts.$inferSelect;
+export type AccountWithTxCount = Account & { txCount: number };
 export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type AccountBalance = typeof accountBalances.$inferSelect;
 export type InsertAccountBalance = z.infer<typeof insertAccountBalanceSchema>;
