@@ -60,6 +60,10 @@ export default function Transactions() {
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkCategoryId, setBulkCategoryId] = useState<string>("");
+
+  // Drag & drop upload state
+  const [dragActive, setDragActive] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   
   // Multi-select filter states - load from localStorage for persistence
   // Default to current year if no years selected (maintain backwards compatibility)
@@ -279,6 +283,32 @@ export default function Transactions() {
     }
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const res = await apiRequest("POST", "/api/transactions/bulk-delete", { ids });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      setSelectedIds(new Set());
+      toast({
+        title: "Gelöscht",
+        description: `${data.deleted} Buchungen wurden gelöscht.`
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Möchten Sie wirklich ${selectedIds.size} Buchung(en) unwiderruflich löschen?`)) return;
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+  };
+
   // Clear selection when filters or transactions change
   useEffect(() => {
     setSelectedIds(new Set());
@@ -407,33 +437,63 @@ export default function Transactions() {
     }
   };
 
-  const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
-    const files = fileInput?.files;
-    
-    if (!files || files.length === 0) {
-      toast({ title: "Keine Dateien", description: "Bitte wählen Sie mindestens eine CSV-Datei aus.", variant: "destructive" });
+  const handleUpload = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+
+    // Combine: dropped files + file input files
+    const fileInput = document.querySelector('#csv-upload') as HTMLInputElement;
+    const inputFiles = fileInput?.files ? Array.from(fileInput.files) : [];
+    const allFiles = droppedFiles.length > 0 ? droppedFiles : inputFiles;
+
+    if (allFiles.length === 0) {
+      toast({ title: "Keine Dateien", description: "Bitte Dateien auswählen oder per Drag & Drop hinzufügen.", variant: "destructive" });
       return;
     }
-    
+
     const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i]);
+    for (const file of allFiles) {
+      formData.append('files', file);
     }
-    
+
     try {
       const result = await uploadTx.mutateAsync(formData);
-      const fileCount = files.length;
-      toast({ 
-        title: "Import abgeschlossen", 
-        description: `${fileCount} Datei${fileCount > 1 ? 'en' : ''}: ${result.imported} Buchungen importiert, ${result.duplicates} Duplikate übersprungen.` 
+      toast({
+        title: "Import abgeschlossen",
+        description: `${allFiles.length} Datei${allFiles.length > 1 ? 'en' : ''}: ${result.imported} Buchungen importiert, ${result.duplicates} Duplikate übersprungen.`
       });
       setIsUploadOpen(false);
+      setDroppedFiles([]);
     } catch (error: any) {
       toast({ title: "Upload fehlgeschlagen", description: error.message, variant: "destructive" });
     }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files).filter(f =>
+      f.name.endsWith('.csv') || f.name.endsWith('.pdf')
+    );
+    if (files.length > 0) {
+      setDroppedFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const removeDroppedFile = (index: number) => {
+    setDroppedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -465,7 +525,7 @@ export default function Transactions() {
               <Trash className="w-4 h-4" />
               <span className="hidden sm:inline">Alle löschen</span>
             </Button>
-            <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+            <Dialog open={isUploadOpen} onOpenChange={(open) => { setIsUploadOpen(open); if (open) setDroppedFiles([]); }}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1 rounded-xl">
                   <FileUp className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
@@ -475,31 +535,69 @@ export default function Transactions() {
               <DialogHeader>
                 <DialogTitle>Transaktionen importieren</DialogTitle>
                 <DialogDescription>
-                  Laden Sie CSV-Dateien von Ihrer Bank hoch. Duplikate werden automatisch erkannt.
+                  Laden Sie CSV-Dateien oder PDF-Kontoauszüge (Sparkasse, Raiffeisenbank) hoch. Duplikate werden automatisch erkannt.
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleUpload} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">CSV-Dateien auswählen (mehrere möglich)</label>
-                  <Input 
-                    type="file" 
-                    name="files" 
+              <div className="space-y-4">
+                {/* Drop Zone */}
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={() => document.getElementById('csv-upload')?.click()}
+                  className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                    dragActive
+                      ? 'border-primary bg-primary/5'
+                      : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30'
+                  }`}
+                >
+                  <input
+                    type="file"
                     id="csv-upload"
-                    accept=".csv" 
+                    accept=".csv,.pdf,application/pdf,text/csv"
                     multiple
-                    required 
-                    className="cursor-pointer" 
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files ? Array.from(e.target.files) : [];
+                      if (files.length > 0) setDroppedFiles(prev => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
                     data-testid="input-csv-files"
                   />
-                  <p className="text-xs text-muted-foreground">Das Konto wird automatisch aus der IBAN in der CSV erkannt.</p>
+                  <FileUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm font-medium">Dateien hierher ziehen</p>
+                  <p className="text-xs text-muted-foreground mt-1">oder klicken zum Auswählen (CSV, PDF)</p>
                 </div>
+
+                {/* File List */}
+                {droppedFiles.length > 0 && (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {droppedFiles.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-sm">
+                        <span className="truncate flex-1">{file.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
+                        <button type="button" onClick={() => removeDroppedFile(i)} className="text-muted-foreground hover:text-destructive shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">Das Konto wird automatisch aus der IBAN erkannt. PDF-Kontoauszüge werden per KI geparst.</p>
+
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsUploadOpen(false)}>Abbrechen</Button>
-                  <Button type="submit" disabled={uploadTx.isPending} data-testid="button-import-csv">
-                    {uploadTx.isPending ? "Importiere..." : "Importieren"}
+                  <Button type="button" variant="outline" onClick={() => { setIsUploadOpen(false); setDroppedFiles([]); }}>Abbrechen</Button>
+                  <Button
+                    type="button"
+                    onClick={() => handleUpload()}
+                    disabled={uploadTx.isPending || droppedFiles.length === 0}
+                    data-testid="button-import-csv"
+                  >
+                    {uploadTx.isPending ? "Importiere..." : `${droppedFiles.length} Datei${droppedFiles.length !== 1 ? 'en' : ''} importieren`}
                   </Button>
                 </div>
-              </form>
+              </div>
             </DialogContent>
           </Dialog>
 
@@ -662,7 +760,7 @@ export default function Transactions() {
                 ))}
               </SelectContent>
             </Select>
-            <Button 
+            <Button
               onClick={handleBulkCategoryChange}
               disabled={!bulkCategoryId || bulkUpdateMutation.isPending}
               data-testid="button-apply-bulk-category"
@@ -671,6 +769,16 @@ export default function Transactions() {
               {bulkUpdateMutation.isPending ? "..." : "Anwenden"}
             </Button>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive whitespace-nowrap"
+            onClick={handleBulkDelete}
+            disabled={bulkDeleteMutation.isPending}
+          >
+            <Trash className="w-4 h-4 mr-1.5" />
+            {bulkDeleteMutation.isPending ? "Lösche..." : `${selectedIds.size} löschen`}
+          </Button>
         </div>
       )}
 

@@ -283,9 +283,12 @@ export class DatabaseStorage implements IStorage {
     return account;
   }
 
-  async updateAccount(id: number, patch: { datevKonto?: string | null }): Promise<Account> {
+  async updateAccount(id: number, patch: { datevKonto?: string | null; iban?: string }): Promise<Account> {
+    const setFields: any = {};
+    if (patch.datevKonto !== undefined) setFields.datevKonto = patch.datevKonto;
+    if (patch.iban) setFields.iban = patch.iban;
     const [updated] = await db.update(accounts)
-      .set({ datevKonto: patch.datevKonto })
+      .set(setFields)
       .where(eq(accounts.id, id))
       .returning();
     return updated;
@@ -584,10 +587,10 @@ export class DatabaseStorage implements IStorage {
     let duplicates = 0;
 
     for (const tx of transactionsData) {
-      // Create a unique hash based on date, amount, description and account
+      // Create a unique hash based on date, amount, description and accountId
       const dateStr = new Date(tx.date).toISOString().split('T')[0];
-      const accountStr = tx.account || "Hauptkonto";
-      const hash = `${dateStr}_${tx.amount}_${tx.description}_${accountStr}`;
+      const accountKey = tx.accountId ? `aid${tx.accountId}` : (tx.account || "Hauptkonto");
+      const hash = `${dateStr}_${tx.amount}_${tx.description}_${accountKey}`;
       
       const existing = await db.select().from(transactions).where(eq(transactions.hash, hash));
       if (existing.length > 0) {

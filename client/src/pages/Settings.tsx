@@ -42,6 +42,7 @@ export default function Settings() {
 
   // Kontoverwaltung state
   const [renameInputs, setRenameInputs] = useState<Record<number, string>>({});
+  const [ibanInputs, setIbanInputs] = useState<Record<number, string>>({});
   const [mergeSource, setMergeSource] = useState<AccountWithTxCount | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
   const [deleteConfirm, setDeleteConfirm] = useState<AccountWithTxCount | null>(null);
@@ -163,6 +164,16 @@ export default function Settings() {
       toast({ title: "Umbenannt", description: "Kontoname wurde aktualisiert." });
     },
     onError: () => toast({ title: "Fehler", description: "Umbenennen fehlgeschlagen.", variant: "destructive" }),
+  });
+
+  const ibanMutation = useMutation({
+    mutationFn: async ({ id, iban }: { id: number; iban: string }) =>
+      apiRequest("PATCH", `/api/accounts/${id}`, { iban }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      toast({ title: "IBAN gespeichert", description: "IBAN wurde aktualisiert." });
+    },
+    onError: () => toast({ title: "Fehler", description: "IBAN konnte nicht gespeichert werden.", variant: "destructive" }),
   });
 
   const mergeMutation = useMutation({
@@ -290,59 +301,81 @@ export default function Settings() {
             ) : (
               <div className="space-y-2">
                 {accounts.map((account) => (
-                  <div key={account.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card">
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium truncate">{account.name}</p>
-                        <Badge variant={account.txCount > 0 ? "default" : "secondary"} className="text-xs shrink-0">
-                          {account.txCount} Buchungen
-                        </Badge>
+                  <div key={account.id} className="flex flex-col gap-3 p-4 rounded-lg border bg-card">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium truncate">{account.name}</p>
+                          <Badge variant={account.txCount > 0 ? "default" : "secondary"} className="text-xs shrink-0">
+                            {account.txCount} Buchungen
+                          </Badge>
+                        </div>
+                        {account.datevKonto && <p className="text-xs text-muted-foreground">DATEV-{account.datevKonto}</p>}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate font-mono">{account.iban}</p>
+
+                      {/* Rename input */}
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={renameInputs[account.id] ?? account.name}
+                          onChange={(e) => setRenameInputs((prev) => ({ ...prev, [account.id]: e.target.value }))}
+                          className="w-48 text-sm"
+                          placeholder="Kontoname"
+                        />
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => renameMutation.mutate({ id: account.id, name: renameInputs[account.id] ?? account.name })}
+                          disabled={renameMutation.isPending || (renameInputs[account.id] ?? account.name) === account.name}
+                          title="Umbenennen"
+                        >
+                          {renameMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                        </Button>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setMergeSource(account); setMergeTargetId(""); }}
+                          title="Zusammenführen mit..."
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />
+                          Zuordnen
+                        </Button>
+                        {account.txCount === 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeleteConfirm(account)}
+                            title="Löschen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Rename input */}
+                    {/* IBAN row */}
                     <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-10 shrink-0">IBAN:</span>
                       <Input
-                        value={renameInputs[account.id] ?? account.name}
-                        onChange={(e) => setRenameInputs((prev) => ({ ...prev, [account.id]: e.target.value }))}
-                        className="w-48 text-sm"
-                        placeholder="Kontoname"
+                        value={ibanInputs[account.id] ?? account.iban}
+                        onChange={(e) => setIbanInputs((prev) => ({ ...prev, [account.id]: e.target.value }))}
+                        className="flex-1 text-xs font-mono"
+                        placeholder="DE..."
                       />
                       <Button
                         size="icon"
                         variant="outline"
-                        onClick={() => renameMutation.mutate({ id: account.id, name: renameInputs[account.id] ?? account.name })}
-                        disabled={renameMutation.isPending || (renameInputs[account.id] ?? account.name) === account.name}
-                        title="Umbenennen"
+                        onClick={() => ibanMutation.mutate({ id: account.id, iban: ibanInputs[account.id] ?? account.iban })}
+                        disabled={ibanMutation.isPending || (ibanInputs[account.id] ?? account.iban) === account.iban}
+                        title="IBAN speichern"
                       >
-                        {renameMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                        {ibanMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
                       </Button>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { setMergeSource(account); setMergeTargetId(""); }}
-                        title="Zusammenführen mit..."
-                      >
-                        <ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />
-                        Zuordnen
-                      </Button>
-                      {account.txCount === 0 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setDeleteConfirm(account)}
-                          title="Löschen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
                     </div>
                   </div>
                 ))}

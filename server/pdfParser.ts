@@ -524,6 +524,120 @@ export async function parseSummenSaldenPdf(filePath: string, year: number): Prom
   return { success: true, year, entries, warnings };
 }
 
+// --- Kontoauszug (Bank Statement) PDF Parsing ---
+
+export interface KontoauszugTransaction {
+  date: string;       // ISO format YYYY-MM-DD
+  amount: number;     // positive = income, negative = expense
+  counterparty: string;
+  description: string;
+}
+
+export interface KontoauszugResult {
+  success: boolean;
+  iban: string;
+  transactions: KontoauszugTransaction[];
+  warnings: string[];
+}
+
+const KONTOAUSZUG_SYSTEM_PROMPT = `Du bist ein Experte für deutsche Kontoauszüge (Raiffeisenbank, Sparkasse, Volksbank, etc.).
+Gib NUR valides JSON zurück — kein Markdown, kein Fließtext, keine Erklärungen.
+
+Extrahiere aus dem Kontoauszug-Text:
+1. Die IBAN des Kontos (z.B. "DE18760694620100048682")
+2. Alle Transaktionen als Array
+
+Für jede Transaktion:
+- "date": Datum im Format "YYYY-MM-DD". Das Jahr musst du aus dem Kontext des Dokuments ableiten (z.B. aus "Kontoauszug 3/2026" oder "erstellt am 31.03.2026").
+- "amount": Betrag als Dezimalzahl. Positiv = Gutschrift/Eingang, Negativ = Belastung/Ausgang.
+  - Raiffeisenbank: "H" = positiv (Haben), "S" = negativ (Soll). Beträge im Format "1.234,56 H" → 1234.56, "30,00 S" → -30.00
+  - Sparkasse: Negative Beträge haben ein Minus-Vorzeichen (z.B. "-1.400,00"), positive haben keines.
+- "counterparty": Name des Zahlungsbeteiligten (Empfänger oder Auftraggeber)
+- "description": Verwendungszweck / Buchungstext. Fasse die relevanten Zeilen zusammen, aber lasse IBAN/BIC/MREF/EREF weg.
+
+WICHTIG - Diese Zeilen NICHT als Transaktion aufnehmen:
+- "alter Kontostand" / "neuer Kontostand" / "Kontostand am"
+- "Übertrag auf Blatt" / "Übertrag von Blatt"
+- "Abschluss" / "Entgeltabrechnung" / "Rechnungsabschluss" Zeilen (diese SIND Transaktionen wenn sie einen Betrag haben)
+- Hinweisseiten, AGB, Bankinfos am Ende
+
+Antwort-Format:
+{
+  "iban": "DE18760694620100048682",
+  "transactions": [
+    { "date": "2026-03-02", "amount": 30.00, "counterparty": "TSV Greding e. V.", "description": "Trainerlohn" },
+    { "date": "2026-03-02", "amount": -30.00, "counterparty": "Patrick Stadler", "description": "Trainerlohn" }
+  ],
+  "warnings": []
+}`;
+
+export async function parseKontoauszugPdf(buffer: Buffer): Promise<KontoauszugResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return { success: false, iban: '', transactions: [], warnings: ['ANTHROPIC_API_KEY nicht gesetzt'] };
+  }
+
+  // Extract text from PDF buffer
+  let text: string;
+  try {
+    const pdfParseModule = await import('pdf-parse') as any;
+    const pdfParse = pdfParseModule.default ?? pdfParseModule;
+    const data = await pdfParse(buffer, { max: 0 });
+    text = data.text as string;
+  } catch (e) {
+    return { success: false, iban: '', transactions: [], warnings: ['PDF konnte nicht gelesen werden.'] };
+  }
+
+  if (text.trim().length < 50) {
+    return { success: false, iban: '', transactions: [], warnings: ['Das PDF enthält keinen extrahierbaren Text (Bild-PDF).'] };
+  }
+
+  const client = new Anthropic({ apiKey });
+  const warnings: string[] = [];
+  let processedText = text;
+  if (text.length > 30000) {
+    processedText = text.substring(0, 30000);
+    warnings.push('PDF-Text wurde auf 30.000 Zeichen gekürzt.');
+  }
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 16000,
+      temperature: 0,
+      system: KONTOAUSZUG_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: processedText }],
+    });
+
+    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { success: false, iban: '', transactions: [], warnings: ['Kein JSON in Claude-Antwort gefunden'] };
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const iban = (parsed.iban || '').replace(/\s/g, '');
+    const transactions: KontoauszugTransaction[] = (parsed.transactions || [])
+      .filter((t: any) => t && t.date && typeof t.amount === 'number' && t.amount !== 0)
+      .map((t: any) => ({
+        date: t.date,
+        amount: t.amount,
+        counterparty: (t.counterparty || '').trim(),
+        description: (t.description || '').trim(),
+      }));
+
+    return {
+      success: true,
+      iban,
+      transactions,
+      warnings: [...warnings, ...(parsed.warnings || [])],
+    };
+  } catch (e) {
+    console.error('[pdfParser] Kontoauszug-Parsing fehlgeschlagen:', e);
+    return { success: false, iban: '', transactions: [], warnings: [`Parsing-Fehler: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+}
+
 export async function parsePdf(filePath: string, year: number): Promise<ParseResult> {
   let text: string;
   try {

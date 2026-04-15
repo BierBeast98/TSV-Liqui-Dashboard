@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 import iconv from "iconv-lite";
 import { processAssistantQuery } from "./assistant";
-import { parsePdf, parseSummenSaldenPdf } from "./pdfParser";
+import { parsePdf, parseSummenSaldenPdf, parseKontoauszugPdf } from "./pdfParser";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -121,8 +121,11 @@ export async function registerRoutes(
   app.patch("/api/accounts/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
-      const { datevKonto } = req.body;
-      const account = await storage.updateAccount(id, { datevKonto: datevKonto || null });
+      const { datevKonto, iban } = req.body;
+      const patch: { datevKonto?: string | null; iban?: string } = {};
+      if (datevKonto !== undefined) patch.datevKonto = datevKonto || null;
+      if (iban) patch.iban = iban.replace(/\s/g, '');
+      const account = await storage.updateAccount(id, patch);
       res.json(account);
     } catch (e) {
       console.error("Error updating account:", e);
@@ -351,6 +354,24 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/transactions/bulk-delete", async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Keine Buchungen ausgewählt" });
+      }
+      let deleted = 0;
+      for (const id of ids) {
+        await storage.deleteTransaction(Number(id));
+        deleted++;
+      }
+      res.json({ deleted });
+    } catch (e) {
+      console.error("Bulk delete error:", e);
+      res.status(500).json({ message: e instanceof Error ? e.message : "Fehler beim Löschen" });
+    }
+  });
+
   // Find related transactions by counterparty for contract creation
   app.get("/api/transactions/:id/related", async (req, res) => {
     try {
@@ -431,9 +452,44 @@ export async function registerRoutes(
       const fileResults: { name: string; imported: number; duplicates: number }[] = [];
 
       for (const file of files) {
+        const ext = path.extname(file.originalname).toLowerCase();
+
+        // --- PDF Kontoauszug Branch ---
+        if (ext === '.pdf') {
+          try {
+            const pdfResult = await parseKontoauszugPdf(file.buffer);
+            if (!pdfResult.success || pdfResult.transactions.length === 0) {
+              fileResults.push({ name: file.originalname, imported: 0, duplicates: 0 });
+              continue;
+            }
+
+            const account = await storage.getOrCreateAccount(pdfResult.iban);
+            const toImport: InsertTransaction[] = pdfResult.transactions.map(t => ({
+              date: new Date(t.date),
+              amount: t.amount,
+              description: t.description || 'Keine Beschreibung',
+              counterparty: t.counterparty || undefined,
+              accountId: account.id,
+              account: account.name,
+              hash: '',
+              recurring: false,
+            })).filter(t => !isNaN(t.date.getTime()) && !isNaN(t.amount));
+
+            const result = await storage.createTransactionsBulk(toImport);
+            totalImported += result.imported;
+            totalDuplicates += result.duplicates;
+            fileResults.push({ name: file.originalname, imported: result.imported, duplicates: result.duplicates });
+          } catch (pdfErr) {
+            console.error(`PDF parse error for ${file.originalname}:`, pdfErr);
+            fileResults.push({ name: file.originalname, imported: 0, duplicates: 0 });
+          }
+          continue;
+        }
+
+        // --- CSV Branch (existing logic) ---
         // Try to decode with different encodings (German banks often use Windows-1252)
         let csvContent: string;
-        
+
         // Check for BOM to detect UTF-8
         const bom = file.buffer.slice(0, 3);
         if (bom[0] === 0xEF && bom[1] === 0xBB && bom[2] === 0xBF) {
@@ -450,7 +506,7 @@ export async function registerRoutes(
             csvContent = utf8Content;
           }
         }
-        
+
         const records = parse(csvContent, {
           columns: true,
           skip_empty_lines: true,
@@ -483,7 +539,7 @@ export async function registerRoutes(
         const toImport: InsertTransaction[] = records.map((r: any) => {
           const dateStr = r['Buchungstag'] || r['Valutadatum'] || r.Date || r.Datum || r.date;
           const amountStr = r['Betrag'] || r.Amount || r.Betrag || r.amount;
-          
+
           // Build description from multiple possible fields
           const verwendungszweck = r['Verwendungszweck'] || '';
           const buchungstext = r['Buchungstext'] || '';
@@ -496,17 +552,17 @@ export async function registerRoutes(
           } else {
             descStr = verwendungszweck || buchungstext || r.Description || r.description || r.Text || '';
           }
-          
+
           // Counterparty: Support multiple column names from different bank formats
-          const counterpartyStr = 
-            r['Name Zahlungsbeteiligter'] || 
-            r['Zahlungsbeteiligter'] || 
+          const counterpartyStr =
+            r['Name Zahlungsbeteiligter'] ||
+            r['Zahlungsbeteiligter'] ||
             r['Beguenstigter/Zahlungspflichtiger'] ||  // Sparkasse format
             r['Begünstigter/Zahlungspflichtiger'] ||   // With umlaut
-            r['Empfänger'] || 
-            r['Auftraggeber'] || 
+            r['Empfänger'] ||
+            r['Auftraggeber'] ||
             '';
-          
+
           if (!dateStr || !amountStr) return null;
 
           let date: Date;
@@ -529,7 +585,7 @@ export async function registerRoutes(
           } else {
             amount = Number(amountStr);
           }
-          
+
           const counterparty = counterpartyStr ? String(counterpartyStr).trim() : null;
 
           return {
@@ -553,7 +609,7 @@ export async function registerRoutes(
       res.json({ imported: totalImported, duplicates: totalDuplicates, files: fileResults });
     } catch (e) {
       console.error(e);
-      res.status(400).json({ message: "Failed to parse CSV" });
+      res.status(400).json({ message: "Failed to parse file" });
     }
   });
 
