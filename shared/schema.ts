@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 // Import auth tables to include them in the schema for migrations
@@ -289,4 +289,69 @@ export type InsertContractSuggestion = z.infer<typeof insertContractSuggestionSc
 export interface ContractSuggestionWithDetails extends ContractSuggestion {
   categoryName?: string;
   accountName?: string;
+}
+
+// === Kassenbericht Config (persisted mappings & hidden items) ===
+
+export const kassenberichtConfig = pgTable("kassenbericht_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// === DATEV DTVF Buchungsstapel (Pivot-Auswertung) ===
+
+// EÜR-Kategorien: A1/A2 = ideell, B1/B2 = Vermögensverwaltung,
+// C1/C2 = Zweckbetrieb, D1/D2 = wirtschaftlicher Geschäftsbetrieb
+// (1 = Einnahmen, 2 = Ausgaben)
+export const EAS_CATEGORIES = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"] as const;
+export type EasCategory = typeof EAS_CATEGORIES[number];
+
+export const datevBookings = pgTable("datev_bookings", {
+  id: serial("id").primaryKey(),
+  buchungsGuid: text("buchungs_guid").notNull().unique(), // Dedup-Key aus DTVF
+  year: integer("year").notNull(),
+  belegdatum: timestamp("belegdatum").notNull(),
+  belegfeld1: text("belegfeld1"),
+  umsatz: real("umsatz").notNull(),              // immer positiv
+  sollHaben: text("soll_haben").notNull(),       // "S" | "H"
+  konto: text("konto").notNull(),
+  gegenkonto: text("gegenkonto").notNull(),
+  buSchluessel: text("bu_schluessel"),
+  buchungstext: text("buchungstext"),
+  herkunftKz: text("herkunft_kz"),               // "RE" | "AN"
+  kost1: text("kost1"),
+  kost2: text("kost2"),
+  // Klassifizierung (abgeleitet)
+  euerKonto: text("euer_konto"),                 // Ertrags-/Aufwandskonto
+  easCategory: text("eas_category"),             // "A1"..."D2" | NULL
+  manualOverride: boolean("manual_override").default(false),
+  sourceFile: text("source_file"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const datevKontoMapping = pgTable("datev_konto_mapping", {
+  konto: text("konto").primaryKey(),
+  kontoname: text("kontoname"),
+  easCategory: text("eas_category").notNull(),   // "A1"..."D2" | "SKIP" (Bilanzkonto)
+  source: text("source").notNull().default("default"), // "default" | "manual"
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDatevBookingSchema = createInsertSchema(datevBookings, {
+  belegdatum: z.coerce.date(),
+}).omit({ id: true, createdAt: true });
+export const insertDatevKontoMappingSchema = createInsertSchema(datevKontoMapping).omit({ updatedAt: true });
+
+export type DatevBooking = typeof datevBookings.$inferSelect;
+export type InsertDatevBooking = z.infer<typeof insertDatevBookingSchema>;
+export type DatevKontoMapping = typeof datevKontoMapping.$inferSelect;
+export type InsertDatevKontoMapping = z.infer<typeof insertDatevKontoMappingSchema>;
+
+export interface DatevPivotSummary {
+  year: number;
+  totals: Record<EasCategory | "UNCLASSIFIED", number>;
+  gesamt: number;
+  bookingCount: number;
+  unclassifiedCount: number;
 }

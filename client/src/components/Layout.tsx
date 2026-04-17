@@ -4,7 +4,6 @@ import {
   Receipt,
   Tags,
   TrendingUp,
-  Menu,
   FileText,
   Settings,
   PartyPopper,
@@ -14,9 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState, useEffect } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import tsvLogo from "@assets/tsv_logo_cropped.png";
 
@@ -62,8 +59,19 @@ const NAV_GROUPS = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(loadCollapsed);
+  const [isNarrow, setIsNarrow] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false
+  );
+
+  // Auf schmalen Viewports (< lg) immer Icon-only anzeigen
+  useEffect(() => {
+    const handler = () => setIsNarrow(window.innerWidth < 1024);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  const effectiveCollapsed = isNarrow || isCollapsed;
 
   const toggleCollapsed = () => {
     setIsCollapsed((prev) => {
@@ -73,13 +81,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const NavContent = ({ mobile = false }: { mobile?: boolean }) => (
+  const NavContent = () => (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className={`flex items-center gap-3 border-b border-border/50 transition-all duration-300 ${isCollapsed && !mobile ? "p-3 justify-center" : "p-5"}`}>
-          <img src={tsvLogo} alt="TSV Greding Logo" className={`object-contain shrink-0 transition-all duration-300 ${isCollapsed && !mobile ? "w-9 h-9" : "w-12 h-12"}`} />
-          {(!isCollapsed || mobile) && (
+        <div className={`flex items-center gap-3 border-b border-border/50 transition-all duration-300 ${effectiveCollapsed ? "p-3 justify-center" : "p-5"}`}>
+          <img src={tsvLogo} alt="TSV Greding Logo" className={`object-contain shrink-0 transition-all duration-300 ${effectiveCollapsed ? "w-9 h-9" : "w-12 h-12"}`} />
+          {(!effectiveCollapsed) && (
             <div className="overflow-hidden">
               <h1 className="text-lg font-bold font-display text-primary leading-tight">TSV Greding</h1>
               <p className="text-xs text-muted-foreground font-medium tracking-wide">Finanzverwaltung</p>
@@ -88,18 +96,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav Groups */}
-        <nav className={`flex-1 py-3 overflow-y-auto space-y-1 transition-all duration-300 ${isCollapsed && !mobile ? "px-2" : "px-3"}`}>
+        <nav className={`flex-1 py-3 overflow-y-auto space-y-1 transition-all duration-300 ${effectiveCollapsed ? "px-2" : "px-3"}`}>
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi} className={gi > 0 ? "pt-2" : ""}>
               {/* Group label */}
-              {group.label && (!isCollapsed || mobile) && (
+              {group.label && (!effectiveCollapsed) && (
                 <div className="px-3 pb-1 pt-1">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                     {group.label}
                   </span>
                 </div>
               )}
-              {group.label && (isCollapsed && !mobile) && (
+              {group.label && (effectiveCollapsed) && (
                 <div className="border-t border-border/40 my-2" />
               )}
 
@@ -110,22 +118,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link key={item.href} href={item.href}>
                     <div
                       className={`flex items-center gap-3 rounded-xl transition-all duration-200 cursor-pointer group ${
-                        isCollapsed && !mobile ? "px-2 py-2.5 justify-center" : "px-3 py-2.5"
+                        effectiveCollapsed ? "px-2 py-2.5 justify-center" : "px-3 py-2.5"
                       } ${
                         isActive
                           ? "bg-primary/10 text-primary font-semibold shadow-sm"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }`}
-                      onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <item.icon className={`w-5 h-5 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
-                      {(!isCollapsed || mobile) && <span className="truncate">{item.label}</span>}
+                      {(!effectiveCollapsed) && <span className="truncate">{item.label}</span>}
                     </div>
                   </Link>
                 );
 
                 // Wrap in tooltip when collapsed (desktop only)
-                if (isCollapsed && !mobile) {
+                if (effectiveCollapsed) {
                   return (
                     <Tooltip key={item.href}>
                       <TooltipTrigger asChild>{navItem}</TooltipTrigger>
@@ -140,20 +147,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Footer: org info + collapse toggle */}
-        <div className={`mt-auto border-t border-border/50 transition-all duration-300 ${isCollapsed && !mobile ? "p-2" : "p-3"}`}>
-          {(!isCollapsed || mobile) && (
+        <div className={`mt-auto border-t border-border/50 transition-all duration-300 ${effectiveCollapsed ? "p-2" : "p-3"}`}>
+          {(!effectiveCollapsed) && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-card border border-border/50 shadow-sm mb-2">
               <img src={tsvLogo} alt="TSV" className="w-7 h-7 object-contain shrink-0" />
               <p className="text-xs text-muted-foreground truncate">TSV Greding e.V.</p>
             </div>
           )}
-          {!mobile && (
+          {!isNarrow && (
             <button
               onClick={toggleCollapsed}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ${isCollapsed ? "justify-center" : ""}`}
-              title={isCollapsed ? "Sidebar ausklappen" : "Sidebar einklappen"}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ${effectiveCollapsed ? "justify-center" : ""}`}
+              title={effectiveCollapsed ? "Sidebar ausklappen" : "Sidebar einklappen"}
             >
-              {isCollapsed
+              {effectiveCollapsed
                 ? <PanelLeftOpen className="w-4 h-4 shrink-0" />
                 : <><PanelLeftClose className="w-4 h-4 shrink-0" /><span className="text-xs">Einklappen</span></>
               }
@@ -164,36 +171,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </TooltipProvider>
   );
 
-  const sidebarWidth = isCollapsed ? "w-16" : "w-64";
-  const mainMargin = isCollapsed ? "lg:ml-16" : "lg:ml-64";
+  const sidebarWidth = effectiveCollapsed ? "w-16" : "w-64";
+  const mainMargin = effectiveCollapsed ? "ml-16" : "ml-64";
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Desktop Sidebar */}
-      <aside className={`hidden lg:block ${sidebarWidth} border-r border-border bg-card/50 backdrop-blur-xl fixed h-full z-30 transition-all duration-300`}>
+      {/* Persistent Left Sidebar (alle Viewports) */}
+      <aside className={`${sidebarWidth} border-r border-border bg-card/50 backdrop-blur-xl fixed h-full z-30 transition-all duration-300`}>
         <NavContent />
       </aside>
 
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 border-b border-border bg-card/80 backdrop-blur-md z-40 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <img src={tsvLogo} alt="TSV Greding" className="w-10 h-10 object-contain" />
-          <span className="text-lg font-bold font-display text-primary">TSV Greding</span>
-        </div>
-        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="w-6 h-6" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-72">
-            <NavContent mobile />
-          </SheetContent>
-        </Sheet>
-      </div>
-
       {/* Main Content */}
-      <main className={`flex-1 ${mainMargin} pt-16 lg:pt-0 min-h-screen transition-all duration-300`}>
+      <main className={`flex-1 ${mainMargin} min-h-screen transition-all duration-300`}>
         <div className="max-w-7xl mx-auto p-4 md:p-8 animate-in">
           {children}
         </div>

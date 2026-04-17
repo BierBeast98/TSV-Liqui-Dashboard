@@ -155,7 +155,7 @@ export default function Home() {
                 <SelectValue placeholder="Jahr" />
               </SelectTrigger>
               <SelectContent>
-                {[2023, 2024, 2025].map(y => (
+                {Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>

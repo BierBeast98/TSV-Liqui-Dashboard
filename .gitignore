@@ -4,6 +4,13 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# Secrets / local config
+.env
+.env.local
+.claude/
+# User uploads (PDFs etc.) — don't commit
+uploads/
+attached_assets/
 # Claude session checkpoints
 .claude-checkpoint.md
 .claude-checkpoints/

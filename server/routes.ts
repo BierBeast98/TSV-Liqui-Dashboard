@@ -11,6 +11,9 @@ import fs from "fs";
 import iconv from "iconv-lite";
 import { processAssistantQuery } from "./assistant";
 import { parsePdf, parseSummenSaldenPdf, parseKontoauszugPdf } from "./pdfParser";
+import { parseDtvfCsv } from "./datevParser";
+import { SKR49_DEFAULT_MAPPING, classifyBooking, type MappingValue } from "./datevSkr49Mapping";
+import { EAS_CATEGORIES, type EasCategory } from "@shared/schema";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -870,6 +873,28 @@ export async function registerRoutes(
     res.json(saved);
   });
 
+  // ── Kassenbericht Config ──────────────────────────────────────────────────
+
+  app.get("/api/kassenbericht-config", async (req, res) => {
+    const hiddenRaw = await storage.getKassenberichtConfig("hidden_items");
+    const mappingsRaw = await storage.getKassenberichtConfig("manual_mappings");
+    res.json({
+      hiddenItems: hiddenRaw ? JSON.parse(hiddenRaw) : [],
+      manualMappings: mappingsRaw ? JSON.parse(mappingsRaw) : [],
+    });
+  });
+
+  app.put("/api/kassenbericht-config", async (req, res) => {
+    const { hiddenItems, manualMappings } = req.body;
+    if (hiddenItems !== undefined) {
+      await storage.setKassenberichtConfig("hidden_items", JSON.stringify(hiddenItems));
+    }
+    if (manualMappings !== undefined) {
+      await storage.setKassenberichtConfig("manual_mappings", JSON.stringify(manualMappings));
+    }
+    res.json({ ok: true });
+  });
+
   // ── Summen- und Saldenliste ────────────────────────────────────────────────
 
   app.post("/api/summen-salden/:year/upload-pdf", sumSalUpload.single('pdf'), async (req, res) => {
@@ -1256,6 +1281,152 @@ export async function registerRoutes(
         res.status(500).json({ error: "Ein Fehler ist aufgetreten" });
       }
     }
+  });
+
+  // === DATEV Buchungsstapel (DTVF) ===
+
+  // Seed Default-Mapping beim Start, wenn Tabelle leer
+  const existingMapping = await storage.getDatevKontoMapping();
+  if (existingMapping.length === 0) {
+    const seeds = Object.entries(SKR49_DEFAULT_MAPPING).map(([konto, info]) => ({
+      konto,
+      kontoname: info.kontoname,
+      easCategory: info.easCategory,
+      source: "default",
+    }));
+    await storage.bulkUpsertDatevKontoMapping(seeds);
+    console.log(`[DATEV] Seeded ${seeds.length} Default-Mappings.`);
+  }
+
+  // Upload DTVF-CSVs (1..N Dateien)
+  app.post("/api/datev-bookings/upload", upload.array("files", 10), async (req, res) => {
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "Keine Dateien hochgeladen" });
+    }
+
+    try {
+      // Aktuelles Mapping laden
+      const mapping = await storage.getDatevKontoMapping();
+      const m = new Map<string, MappingValue>();
+      for (const e of mapping) m.set(e.konto, e.easCategory as MappingValue);
+
+      const results: Array<{
+        filename: string;
+        year: number;
+        herkunftKz: string;
+        parsed: number;
+        inserted: number;
+        skipped: number;
+        skippedDuringParse: number;
+        unclassified: number;
+      }> = [];
+
+      for (const file of files) {
+        const parseResult = parseDtvfCsv(file.buffer, file.originalname);
+        const classified = parseResult.bookings.map((b) => {
+          const { euerKonto, easCategory } = classifyBooking(b.konto, b.gegenkonto, m, b.kost1 ?? null);
+          return {
+            ...b,
+            euerKonto: euerKonto ?? null,
+            easCategory: easCategory ?? null,
+            manualOverride: false,
+            sourceFile: file.originalname,
+          };
+        });
+
+        const { inserted, skipped } = await storage.upsertDatevBookings(classified);
+        const unclassified = classified.filter((b) => b.easCategory === null && b.euerKonto === null).length;
+
+        results.push({
+          filename: file.originalname,
+          year: parseResult.year,
+          herkunftKz: parseResult.herkunftKz,
+          parsed: parseResult.bookings.length,
+          inserted,
+          skipped,
+          skippedDuringParse: parseResult.skipped.length,
+          unclassified,
+        });
+      }
+
+      res.json({ results });
+    } catch (err: any) {
+      console.error("[DATEV] Upload-Fehler:", err);
+      res.status(500).json({ error: err.message ?? "Parser-Fehler" });
+    }
+  });
+
+  // Liste der Jahre, für die Buchungen vorhanden sind
+  app.get("/api/datev-bookings/years", async (_req, res) => {
+    const years = await storage.getDatevYears();
+    res.json({ years });
+  });
+
+  // Pivot-Summen für ein Jahr
+  app.get("/api/datev-bookings/:year/pivot", async (req, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+    const pivot = await storage.getDatevPivot(year);
+    res.json(pivot);
+  });
+
+  // Alle Buchungen eines Jahres
+  app.get("/api/datev-bookings/:year", async (req, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+    const bookings = await storage.getDatevBookings(year);
+    res.json(bookings);
+  });
+
+  // Manuelle Klassifizierung einer Buchung
+  app.patch("/api/datev-bookings/:id/classify", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const { easCategory } = req.body ?? {};
+    if (!id) return res.status(400).json({ error: "Ungültige ID" });
+    if (!EAS_CATEGORIES.includes(easCategory)) {
+      return res.status(400).json({ error: "Ungültige E/A-Kategorie" });
+    }
+    await storage.updateDatevBookingClassification(id, easCategory as EasCategory);
+    res.json({ success: true });
+  });
+
+  // Alle Buchungen eines Jahres löschen
+  app.delete("/api/datev-bookings/:year", async (req, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+    const deleted = await storage.deleteDatevBookingsByYear(year);
+    res.json({ deleted });
+  });
+
+  // Mapping-Management
+  app.get("/api/datev-konto-mapping", async (_req, res) => {
+    const mapping = await storage.getDatevKontoMapping();
+    res.json(mapping);
+  });
+
+  app.patch("/api/datev-konto-mapping/:konto", async (req, res) => {
+    const konto = req.params.konto;
+    const { easCategory, kontoname } = req.body ?? {};
+    const validValues = [...EAS_CATEGORIES, "SKIP"];
+    if (!validValues.includes(easCategory)) {
+      return res.status(400).json({ error: "Ungültige Kategorie" });
+    }
+    await storage.upsertDatevKontoMapping({
+      konto,
+      kontoname: kontoname ?? null,
+      easCategory,
+      source: "manual",
+    });
+    res.json({ success: true });
+  });
+
+  // Bestehende Buchungen neu klassifizieren (nach Mapping-Änderung)
+  app.post("/api/datev-bookings/:year/reclassify", async (req, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+    const updated = await storage.reclassifyDatevBookings(year);
+    res.json({ updated });
   });
 
   return httpServer;

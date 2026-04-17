@@ -1,7 +1,10 @@
 import { db } from "./db";
 import {
   categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts, contractSuggestions,
-  summenSaldenEntries,
+  summenSaldenEntries, kassenberichtConfig, datevBookings, datevKontoMapping,
+  type DatevBooking, type InsertDatevBooking,
+  type DatevKontoMapping, type InsertDatevKontoMapping,
+  type DatevPivotSummary, type EasCategory, EAS_CATEGORIES,
   type Category, type InsertCategory,
   type Transaction, type InsertTransaction,
   type UpdateCategoryRequest, type UpdateTransactionRequest,
@@ -116,6 +119,10 @@ export interface IStorage extends IAuthStorage {
   updateContractSuggestionStatus(id: number, status: "pending" | "accepted" | "dismissed"): Promise<ContractSuggestion>;
   clearPendingSuggestions(): Promise<void>;
   acceptSuggestion(id: number): Promise<Contract>;
+
+  // Kassenbericht Config
+  getKassenberichtConfig(key: string): Promise<string | null>;
+  setKassenberichtConfig(key: string, value: string): Promise<void>;
 }
 
 export interface FiscalAreaSummary {
@@ -753,103 +760,133 @@ export class DatabaseStorage implements IStorage {
     if (!tx || tx.categoryId) return tx;
 
     const cats = await this.getCategories();
-    const desc = tx.description.toLowerCase();
-    
-    // Check for internal transfers between own accounts
-    // An internal transfer requires: matching transaction with opposite sign on different account
+    const descLower = tx.description.toLowerCase();
+
+    // ── Step 1: Internal transfer detection ──────────────────────────────────
+    // If "interne umbuchung", "festgeldanlage", or "neuanlage" is in the description,
+    // this is a balance-sheet movement — skip, do not categorize as income/expense.
+    if (
+      descLower.includes('interne umbuchung') ||
+      descLower.includes('festgeldanlage') ||
+      descLower.includes('neuanlage  vr-festgeld') ||
+      descLower.includes('darl. tilg') // loan repayment principal
+    ) {
+      return tx;
+    }
+
+    // Check via own IBANs in description (existing logic, improved)
     const accounts = await this.getAccounts();
-    const ownIbans = accounts.map(a => a.iban.toUpperCase());
+    const realIbans = accounts.map(a => a.iban.toUpperCase()).filter(i => !i.startsWith('DATEV'));
     const descUpper = tx.description.toUpperCase();
-    
-    // Check if description mentions one of our own IBANs OR contains "Umbuchung"
-    const mentionsOwnIban = ownIbans.some(iban => descUpper.includes(iban));
-    const mentionsUmbuchung = desc.includes('umbuchung');
-    
-    if (mentionsOwnIban || mentionsUmbuchung) {
-      // Look for a matching counter-transaction on a different account
+    const mentionsOwnIban = realIbans.some(iban => descUpper.includes(iban));
+
+    if (mentionsOwnIban) {
       const txDate = new Date(tx.date);
       const year = txDate.getFullYear();
       const allTx = await this.getTransactions({ year });
-      
-      // Find matching transaction: same absolute amount, opposite sign, different account, same date (+/- 2 days)
       const counterTx = allTx.find(other => {
-        if (other.id === tx.id) return false;
-        if (other.accountId === tx.accountId) return false;
-        
-        // Must have opposite sign and same absolute amount
+        if (other.id === tx.id || other.accountId === tx.accountId) return false;
         const sameAmount = Math.abs(other.amount) === Math.abs(tx.amount);
         const oppositeSign = (other.amount > 0 && tx.amount < 0) || (other.amount < 0 && tx.amount > 0);
-        
         if (!sameAmount || !oppositeSign) return false;
-        
-        // Check if dates are within 2 days of each other
-        const otherDate = new Date(other.date);
-        const daysDiff = Math.abs((txDate.getTime() - otherDate.getTime()) / (1000 * 60 * 60 * 24));
-        
+        const daysDiff = Math.abs((txDate.getTime() - new Date(other.date).getTime()) / 86400000);
         return daysDiff <= 2;
       });
-      
-      if (counterTx) {
-        const transferCat = cats.find(c => c.name === 'Interne Umbuchung');
-        if (transferCat) {
-          // Also mark the counter transaction as internal transfer if not already categorized
-          if (!counterTx.categoryId) {
-            await this.updateTransaction(counterTx.id, { categoryId: transferCat.id });
-          }
-          return await this.updateTransaction(transactionId, { categoryId: transferCat.id });
+      if (counterTx) return tx; // confirmed internal transfer — skip
+    }
+
+    // ── Step 2: Learn from counterparty (most powerful signal) ───────────────
+    if (tx.counterparty) {
+      const normalizedCP = tx.counterparty.toLowerCase().trim().replace(/\s+/g, ' ');
+      const [topMatch] = await db
+        .select({ categoryId: transactions.categoryId, cnt: sql<number>`COUNT(*)::int` })
+        .from(transactions)
+        .where(
+          and(
+            sql`LOWER(TRIM(REGEXP_REPLACE(counterparty, '\\s+', ' ', 'g'))) = ${normalizedCP}`,
+            sql`category_id IS NOT NULL`,
+            sql`id != ${transactionId}`,
+          )
+        )
+        .groupBy(transactions.categoryId)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(1);
+
+      if (topMatch?.categoryId) {
+        const cat = cats.find(c => c.id === topMatch.categoryId);
+        if (cat && !(cat.type === 'income' && tx.amount < 0) && !(cat.type === 'expense' && tx.amount > 0)) {
+          return await this.updateTransaction(transactionId, { categoryId: cat.id });
         }
       }
     }
 
+    // ── Step 3: Keyword mapping (description-based) ──────────────────────────
     const mapping: Record<string, string[]> = {
       // A. Ideeller Bereich
-      "Mitgliedsbeiträge": ["sepa sammel", "mitglied", "jahresbeitrag", "mitgliedschaft"],
-      "Abteilungsbeiträge": ["skiclub", "abteilung"],
-      "Spenden": ["spende", "zuwendung", "stiftung", "geldspende"],
-      "Zuschüsse": ["zuschuss", "förderung", "beihilfe", "kommunal", "vereinspauschale", "sportförderung", "kostenbeteiligung"],
-      "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv", "bayerischer"],
-      "Sonstige Ausgaben": ["rückweisung", "rueckweisung", "mahngebühr", "abschluss per", "retoure", "erstattung", "fehlbuchung", "rollengebühr", "grabpflege"],
-      "Steuern": ["finanzamt", "steuer", "ust", "kest", "solidaritätszuschlag"],
-      "Büromaterial & Porto": ["porto", "büromaterial"],
-      
+      "Mitgliedsbeiträge": ["sepa sammel", "mitglied", "jahresbeitrag", "mitgliedschaft", "basis-ls e.v"],
+      "Abteilungsbeiträge": ["skiclub beitrag", "abteilungsbeitrag"],
+      "Spenden": ["spende", "geldspende", "foerderverein", "förderverein"],
+      "Stiftungen": ["stiftung", "dengler"],
+      "Zuschüsse": [
+        "zuschuss", "förderung", "beihilfe", "vereinspauschale", "sportförderung",
+        "kostenbeteiligung", "sportforderung", "ao 6215", "ao 6426",
+      ],
+      "Verbandsabgaben": ["verband", "blsv", "dfb", "bfv", "bayerischer fussball"],
+      "Sonstige Ausgaben": [
+        "rückweisung", "rueckweisung", "mahngebühr", "retoure", "fehlbuchung",
+        "grabpflege", "rollengebühr",
+      ],
+      "Bankgebühren": ["abschluss per", "kontoführung", "kontoabschluss", "buchungsposten"],
+      "Steuern": ["finanzamt", "steuer", "kest", "solidaritätszuschlag"],
+      "Büromaterial & Porto": ["porto", "büromaterial", "druckerei", "briefmarke"],
+
       // B. Vermögensverwaltung
       "Pachteinnahmen": ["pacht"],
-      "Platz & Gebäude": ["turnhalle", "sporthalle", "halle", "grundsteuer", "reinigung", "hausmeister", "müll"],
-      "Strom & Energie": ["n-ergie", "strom", "gas", "fernwärme", "abschlag", "energie"],
-      "Versicherungen": ["versicherung", "arag", "vdek", "allianz", "signal", "haftpflicht", "zurich"],
-      "Reparaturen": ["reparatur", "instandhaltung", "wartung"],
-      "Zinserträge": ["zinsgutschrift", "zinsertrag"],
-      "Darlehenszinsen": ["zinsaufwand", "darlehenszins"],
-      
+      "Nebenkosten-Abrechnung": ["nebenkosten", "betriebskosten", "svg-verr", "abrechnung"],
+      "Platz & Gebäude": ["turnhalle", "sporthalle", "grundsteuer", "reinigung", "hausmeister", "müll", "abwasser"],
+      "Strom & Energie": ["n-ergie", "stromversorgung", "strom", "gas", "fernwärme", "energie", "heizwerk", "wärme", "abschlag energie"],
+      "Wasser & Heizung": ["wasserversorgung", "wasserwerk", "heizung", "heizöl"],
+      "Versicherungen": ["versicherung", "arag", "allianz", "signal", "haftpflicht", "zurich", "vdek"],
+      "Reparaturen": ["reparatur", "instandhaltung", "wartung", "sanierung"],
+      "Zinserträge": ["zinsgutschrift", "zinsertrag", "habenzins"],
+      "Darlehenszinsen": ["zinsaufwand", "darlehenszins", "annuität"],
+
       // C. Zweckbetriebe
-      "Veranstaltungen (Einnahmen)": ["hallencup", "turnier", "fasching", "weihnachtsfeier", "vereinsfest", "stadtmeisterschaft", "sommerfest", "cup"],
-      "Veranstaltungen (Ausgaben)": ["hallencup", "turnier ausgaben"],
+      "Veranstaltungen (Einnahmen)": [
+        "hallencup", "fasching", "vereinsfest", "stadtmeisterschaft", "sommerfest",
+        "weihnachtsfeier einnahmen", "ertrag weihnachtsfeier",
+      ],
+      "Veranstaltungen (Ausgaben)": [
+        "trainingslager", "soccatours", "mossner-reisen", "busfahrt", "zeltverleih",
+        "auszahlung weihnachtsfeier",
+      ],
       "Eintrittsgelder": ["sportplatzeinnahmen", "eintritt"],
-      "Spielerablöse": ["spielerwechsel", "ablöse", "abloese"],
-      "Übungsleiter": ["übungsleiter", "uebungsleiter", "ül-vergütung", "ul-vergütung", "ul-vergutung"],
-      "Ehrenamtspauschale": ["ehrenamtspauschale", "ehrenamt"],
-      "Aufwandsentschädigung": ["aufwandsentschädigung"],
-      "Trainer & Schiedsrichter": ["trainerlohn", "schiedsrichter"],
-      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug"],
-      "Sportkleidung": ["trikot", "dress", "sportbekleidung", "bekleidung"],
-      "Platzpflege": ["platzpflege", "rasen", "mäher", "dünger"],
-      "Teilnehmergebühren": ["teilnehmer", "kurs"],
-      
+      "Startgelder": ["startgeld", "meldegebühr"],
+      "Spielerablöse": ["spielerwechsel", "ablöse", "abloese", "transferentschädigung"],
+      "Übungsleiter": ["übungsleiter", "uebungsleiter", "ül-vergütung", "ul-vergütung"],
+      "Ehrenamtspauschale": ["ehrenamtspauschale"],
+      "Aufwandsentschädigung": ["aufwandsentschädigung", "auslagenerstattung"],
+      "Trainer & Schiedsrichter": ["trainerlohn", "schiedsrichter", "trainer"],
+      "Schiedsrichter": ["schiedsrichtergebühr"],
+      "Geräte & Material": ["baumarkt", "obi", "holz", "werkzeug", "material"],
+      "Sportkleidung": ["trikot", "dress", "sportbekleidung", "bekleidung", "sport koenig", "sportausrüstung"],
+      "Platzpflege": ["platzpflege", "rasen", "mäher", "dünger", "landtechnik", "platzpfleg"],
+      "Fahrzeugkosten": ["tankstelle", "kraftstoff", "kfz", "fahrzeug"],
+      "Teilnehmergebühren": ["teilnahmegebühr", "kursgebühr"],
+
       // D. Wirtschaftlicher Geschäftsbetrieb
       "Sponsoring": ["sponsoring", "sponsor"],
-      "Bandenwerbung": ["bande", "bandenwerbung"],
-      "Bewirtung": ["bewirtung", "speisen", "catering", "girocard"],
-      "Wareneinkauf": ["einkauf", "waren", "getränkehandel", "brauerei"],
+      "Werbekosten": ["werbung", "werbeagentur", "image werbung", "markwart", "bandenwerbung", "banner"],
+      "Bewirtung": ["bewirtung", "speisen", "catering", "pizz", "metzgerei", "getränk", "edeka", "lebensmittel"],
+      "Wareneinkauf": ["wareneinkauf", "getränkehandel", "brauerei", "getränke"],
     };
 
     for (const [catName, keywords] of Object.entries(mapping)) {
-      if (keywords.some(k => desc.includes(k))) {
+      if (keywords.some(k => descLower.includes(k))) {
         const cat = cats.find(c => c.name === catName);
         if (cat) {
-          // Check if category type matches transaction direction
           if (cat.type === 'income' && tx.amount < 0) continue;
           if (cat.type === 'expense' && tx.amount > 0) continue;
-          
           return await this.updateTransaction(transactionId, { categoryId: cat.id });
         }
       }
@@ -1168,12 +1205,12 @@ export class DatabaseStorage implements IStorage {
   async acceptSuggestion(id: number): Promise<Contract> {
     const suggestion = await this.getContractSuggestion(id);
     if (!suggestion) throw new Error("Vorschlag nicht gefunden");
-    
+
     const type = suggestion.type as "income" | "expense";
-    const signedAmount = type === "expense" 
-      ? -Math.abs(suggestion.amount) 
+    const signedAmount = type === "expense"
+      ? -Math.abs(suggestion.amount)
       : Math.abs(suggestion.amount);
-    
+
     const contract = await this.createContract({
       name: suggestion.name,
       description: suggestion.description,
@@ -1183,9 +1220,173 @@ export class DatabaseStorage implements IStorage {
       categoryId: suggestion.categoryId,
       isActive: true
     });
-    
+
     await this.updateContractSuggestionStatus(id, "accepted");
     return contract;
+  }
+
+  async getKassenberichtConfig(key: string): Promise<string | null> {
+    const [row] = await db.select().from(kassenberichtConfig).where(eq(kassenberichtConfig.key, key));
+    return row?.value ?? null;
+  }
+
+  async setKassenberichtConfig(key: string, value: string): Promise<void> {
+    await db.insert(kassenberichtConfig)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: kassenberichtConfig.key, set: { value, updatedAt: new Date() } });
+  }
+
+  // === DATEV Bookings ===
+
+  async upsertDatevBookings(
+    bookings: InsertDatevBooking[]
+  ): Promise<{ inserted: number; skipped: number }> {
+    if (bookings.length === 0) return { inserted: 0, skipped: 0 };
+
+    // Prüfe welche GUIDs schon existieren
+    const guids = bookings.map((b) => b.buchungsGuid);
+    const existing = await db
+      .select({ guid: datevBookings.buchungsGuid })
+      .from(datevBookings)
+      .where(inArray(datevBookings.buchungsGuid, guids));
+    const existingSet = new Set(existing.map((e) => e.guid));
+
+    const toInsert = bookings.filter((b) => !existingSet.has(b.buchungsGuid));
+    if (toInsert.length === 0) {
+      return { inserted: 0, skipped: bookings.length };
+    }
+
+    // Batched insert (PG hat Parameter-Limit ~64k, wir halten uns bei 500 Zeilen)
+    for (let i = 0; i < toInsert.length; i += 500) {
+      await db.insert(datevBookings).values(toInsert.slice(i, i + 500));
+    }
+    return { inserted: toInsert.length, skipped: bookings.length - toInsert.length };
+  }
+
+  async getDatevBookings(year: number): Promise<DatevBooking[]> {
+    return db
+      .select()
+      .from(datevBookings)
+      .where(eq(datevBookings.year, year))
+      .orderBy(asc(datevBookings.belegdatum), asc(datevBookings.id));
+  }
+
+  async getDatevYears(): Promise<number[]> {
+    const rows = await db
+      .selectDistinct({ year: datevBookings.year })
+      .from(datevBookings);
+    return rows.map((r) => r.year).sort((a, b) => b - a);
+  }
+
+  async getDatevPivot(year: number): Promise<DatevPivotSummary> {
+    const rows = await db
+      .select()
+      .from(datevBookings)
+      .where(eq(datevBookings.year, year));
+
+    const totals: Record<string, number> = {};
+    for (const c of EAS_CATEGORIES) totals[c] = 0;
+    totals["UNCLASSIFIED"] = 0;
+
+    let unclassifiedCount = 0;
+    for (const r of rows) {
+      const key = r.easCategory ?? (r.euerKonto === null ? null : "UNCLASSIFIED");
+      if (!key) continue; // Bilanz-Buchungen (beide SKIP) bleiben aus dem Pivot
+      totals[key] = (totals[key] ?? 0) + r.umsatz;
+      if (key === "UNCLASSIFIED") unclassifiedCount++;
+    }
+
+    const gesamt = EAS_CATEGORIES.reduce((s, c) => {
+      // Einnahmen positiv, Ausgaben negativ
+      const isIncome = c.endsWith("1");
+      return s + (isIncome ? totals[c] : -totals[c]);
+    }, 0);
+
+    return {
+      year,
+      totals: totals as DatevPivotSummary["totals"],
+      gesamt,
+      bookingCount: rows.length,
+      unclassifiedCount,
+    };
+  }
+
+  async updateDatevBookingClassification(
+    id: number,
+    easCategory: EasCategory
+  ): Promise<void> {
+    await db
+      .update(datevBookings)
+      .set({ easCategory, manualOverride: true })
+      .where(eq(datevBookings.id, id));
+  }
+
+  async deleteDatevBookingsByYear(year: number): Promise<number> {
+    const deleted = await db
+      .delete(datevBookings)
+      .where(eq(datevBookings.year, year))
+      .returning({ id: datevBookings.id });
+    return deleted.length;
+  }
+
+  async getDatevKontoMapping(): Promise<DatevKontoMapping[]> {
+    return db.select().from(datevKontoMapping).orderBy(asc(datevKontoMapping.konto));
+  }
+
+  async upsertDatevKontoMapping(entry: InsertDatevKontoMapping): Promise<void> {
+    await db
+      .insert(datevKontoMapping)
+      .values({ ...entry, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: datevKontoMapping.konto,
+        set: {
+          kontoname: entry.kontoname,
+          easCategory: entry.easCategory,
+          source: entry.source,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  async bulkUpsertDatevKontoMapping(entries: InsertDatevKontoMapping[]): Promise<void> {
+    if (entries.length === 0) return;
+    for (const e of entries) {
+      await this.upsertDatevKontoMapping(e);
+    }
+  }
+
+  /**
+   * Wendet das aktuelle Mapping auf alle bestehenden Buchungen eines Jahres neu an
+   * (z.B. nach manuellem Mapping-Update). Überschreibt `manualOverride=true`-Zeilen NICHT.
+   */
+  async reclassifyDatevBookings(year: number): Promise<number> {
+    const { classifyBooking } = await import("./datevSkr49Mapping");
+    const mapping = await this.getDatevKontoMapping();
+    const m = new Map<string, any>();
+    for (const entry of mapping) m.set(entry.konto, entry.easCategory);
+
+    const rows = await db
+      .select()
+      .from(datevBookings)
+      .where(and(eq(datevBookings.year, year), eq(datevBookings.manualOverride, false)));
+
+    let updated = 0;
+    for (const row of rows) {
+      const { euerKonto, easCategory } = classifyBooking(
+        row.konto,
+        row.gegenkonto,
+        m,
+        row.kost1 ?? null,
+      );
+      if (row.easCategory !== easCategory || row.euerKonto !== euerKonto) {
+        await db
+          .update(datevBookings)
+          .set({ easCategory, euerKonto })
+          .where(eq(datevBookings.id, row.id));
+        updated++;
+      }
+    }
+    return updated;
   }
 }
 

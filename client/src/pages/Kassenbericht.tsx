@@ -1,5 +1,6 @@
-import { useState, useMemo, ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, ReactNode, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -10,6 +11,7 @@ import {
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { DatevAuswertungTab } from "@/components/DatevAuswertungTab";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -300,31 +302,31 @@ function matchLineItems(
   );
 }
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
+// ── localStorage helpers (fallback / cache) ───────────────────────────────────
 
 const LS_HIDDEN = "kassenbericht_hidden_items";
 const LS_MAPPINGS = "kassenbericht_manual_mappings";
 
-function loadHidden(): Set<string> {
+function loadHiddenLS(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(LS_HIDDEN) ?? "[]")); }
   catch { return new Set(); }
 }
-function saveHidden(s: Set<string>) {
-  localStorage.setItem(LS_HIDDEN, JSON.stringify([...s]));
-}
-function loadMappings(): ManualMapping[] {
+function loadMappingsLS(): ManualMapping[] {
   try {
     const raw: any[] = JSON.parse(localStorage.getItem(LS_MAPPINGS) ?? "[]");
     return raw.map((m) => ({
       ...m,
-      // Migrate old single-string format to arrays
       displayDescs: m.displayDescs ?? (m.displayDesc ? [m.displayDesc] : []),
       compareDescs: m.compareDescs ?? (m.compareDesc ? [m.compareDesc] : []),
     }));
   } catch { return []; }
 }
-function saveMappings(m: ManualMapping[]) {
-  localStorage.setItem(LS_MAPPINGS, JSON.stringify(m));
+function migrateMappings(raw: any[]): ManualMapping[] {
+  return raw.map((m) => ({
+    ...m,
+    displayDescs: m.displayDescs ?? (m.displayDesc ? [m.displayDesc] : []),
+    compareDescs: m.compareDescs ?? (m.compareDesc ? [m.compareDesc] : []),
+  }));
 }
 
 // ── LinkingDialog ─────────────────────────────────────────────────────────────
@@ -555,6 +557,7 @@ export default function Kassenbericht() {
   const [displayYear, setDisplayYear] = useState(currentYear - 1);
   const [compareYear, setCompareYear] = useState(currentYear - 2);
   const [activeTab, setActiveTab] = useState("ideell");
+  const [pageTab, setPageTab] = useState<"jahresvergleich" | "datev">("jahresvergleich");
   const [deltaMode, setDeltaMode] = useState<"pct" | "eur">("pct");
   const [presentationMode, setPresentationMode] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -567,9 +570,35 @@ export default function Kassenbericht() {
       return next;
     });
   };
-  const [hiddenItems, setHiddenItems] = useState<Set<string>>(loadHidden);
-  const [manualMappings, setManualMappings] = useState<ManualMapping[]>(loadMappings);
+  const [hiddenItems, setHiddenItems] = useState<Set<string>>(loadHiddenLS);
+  const [manualMappings, setManualMappings] = useState<ManualMapping[]>(loadMappingsLS);
   const [linkingItem, setLinkingItem] = useState<MatchedLineItem | null>(null);
+
+  // Load config from server; update state when it arrives
+  const { data: serverConfig } = useQuery<{ hiddenItems: string[]; manualMappings: ManualMapping[] }>({
+    queryKey: ["/api/kassenbericht-config"],
+    queryFn: async () => {
+      const res = await fetch("/api/kassenbericht-config", { credentials: "include" });
+      if (!res.ok) throw new Error("Config laden fehlgeschlagen");
+      return res.json();
+    },
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    if (!serverConfig) return;
+    const hidden = new Set(serverConfig.hiddenItems ?? []);
+    const mappings = migrateMappings(serverConfig.manualMappings ?? []);
+    setHiddenItems(hidden);
+    setManualMappings(mappings);
+    localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden]));
+    localStorage.setItem(LS_MAPPINGS, JSON.stringify(mappings));
+  }, [serverConfig]);
+
+  const saveConfigMutation = useMutation({
+    mutationFn: async (payload: { hiddenItems?: string[]; manualMappings?: ManualMapping[] }) =>
+      apiRequest("PUT", "/api/kassenbericht-config", payload),
+  });
 
   const yearOptions = Array.from({ length: currentYear - 2021 }, (_, i) => 2022 + i);
 
@@ -577,13 +606,14 @@ export default function Kassenbericht() {
     setHiddenItems((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
-      saveHidden(next);
+      const arr = [...next];
+      localStorage.setItem(LS_HIDDEN, JSON.stringify(arr));
+      saveConfigMutation.mutate({ hiddenItems: arr });
       return next;
     });
   };
 
   const addManualMapping = (displayDescs: string[], compareDescs: string[], fiscalArea: string, type: "income" | "expense") => {
-    // Remove any existing non-blocked mappings that overlap with the new group
     const filtered = manualMappings.filter((m) => {
       if (m.blocked || m.fiscalArea !== fiscalArea || m.type !== type) return true;
       const normD = displayDescs.map(normalizeDesc);
@@ -597,13 +627,15 @@ export default function Kassenbericht() {
       { id: `${Date.now()}-${Math.random()}`, fiscalArea, type, displayDescs, compareDescs, blocked: false },
     ];
     setManualMappings(next);
-    saveMappings(next);
+    localStorage.setItem(LS_MAPPINGS, JSON.stringify(next));
+    saveConfigMutation.mutate({ manualMappings: next });
   };
 
   const removeMapping = (id: string) => {
     const next = manualMappings.filter((m) => m.id !== id);
     setManualMappings(next);
-    saveMappings(next);
+    localStorage.setItem(LS_MAPPINGS, JSON.stringify(next));
+    saveConfigMutation.mutate({ manualMappings: next });
   };
 
   const blockPair = (displayDesc: string, compareDesc: string, fiscalArea: string, type: "income" | "expense") => {
@@ -612,7 +644,8 @@ export default function Kassenbericht() {
       { id: `${Date.now()}-${Math.random()}`, fiscalArea, type, displayDescs: [displayDesc], compareDescs: [compareDesc], blocked: true },
     ];
     setManualMappings(next);
-    saveMappings(next);
+    localStorage.setItem(LS_MAPPINGS, JSON.stringify(next));
+    saveConfigMutation.mutate({ manualMappings: next });
   };
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
@@ -890,6 +923,21 @@ export default function Kassenbericht() {
   return (
     <Layout>
       <div className="space-y-6">
+        <Tabs value={pageTab} onValueChange={(v) => setPageTab(v as "jahresvergleich" | "datev")}>
+          <TabsList data-testid="tabs-kassenbericht-pagelevel">
+            <TabsTrigger value="jahresvergleich" data-testid="tab-jahresvergleich">Jahresvergleich</TabsTrigger>
+            <TabsTrigger value="datev" data-testid="tab-datev">DATEV-Auswertung</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="datev" className="mt-4">
+            <div className="mb-4">
+              <h1 className="text-3xl font-bold font-display">DATEV-Auswertung</h1>
+              <p className="text-muted-foreground mt-1">Pivot-Auswertung des DATEV-Buchungsstapels nach EÜR-Bereichen (A1…D2)</p>
+            </div>
+            <DatevAuswertungTab />
+          </TabsContent>
+
+          <TabsContent value="jahresvergleich" className="mt-4 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -1062,6 +1110,8 @@ export default function Kassenbericht() {
             </Card>
           </>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Linking Dialog */}
