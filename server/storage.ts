@@ -1,7 +1,8 @@
 import { db } from "./db";
 import {
   categories, transactions, accounts, accountBalances, euerReports, euerLineItems, events, eventEntries, contracts, contractSuggestions,
-  summenSaldenEntries, kassenberichtConfig, datevBookings, datevKontoMapping,
+  summenSaldenEntries, kassenberichtConfig, datevBookings, datevKontoMapping, liquiditySnapshots,
+  type LiquiditySnapshot, type InsertLiquiditySnapshot,
   type DatevBooking, type InsertDatevBooking,
   type DatevKontoMapping, type InsertDatevKontoMapping,
   type DatevPivotSummary, type EasCategory, EAS_CATEGORIES,
@@ -244,6 +245,7 @@ export class DatabaseStorage implements IStorage {
         iban: accounts.iban,
         name: accounts.name,
         datevKonto: accounts.datevKonto,
+        kontoTyp: accounts.kontoTyp,
         createdAt: accounts.createdAt,
         txCount: sql<number>`CAST(COUNT(${transactions.id}) AS INTEGER)`,
       })
@@ -290,10 +292,11 @@ export class DatabaseStorage implements IStorage {
     return account;
   }
 
-  async updateAccount(id: number, patch: { datevKonto?: string | null; iban?: string }): Promise<Account> {
+  async updateAccount(id: number, patch: { datevKonto?: string | null; iban?: string; kontoTyp?: string | null }): Promise<Account> {
     const setFields: any = {};
     if (patch.datevKonto !== undefined) setFields.datevKonto = patch.datevKonto;
     if (patch.iban) setFields.iban = patch.iban;
+    if (patch.kontoTyp !== undefined) setFields.kontoTyp = patch.kontoTyp;
     const [updated] = await db.update(accounts)
       .set(setFields)
       .where(eq(accounts.id, id))
@@ -1387,6 +1390,87 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return updated;
+  }
+
+  // === Liquiditaets-Snapshots ===
+
+  async getLiquiditySnapshots(): Promise<LiquiditySnapshot[]> {
+    return await db.select().from(liquiditySnapshots).orderBy(asc(liquiditySnapshots.year));
+  }
+
+  async upsertLiquiditySnapshot(snapshot: InsertLiquiditySnapshot): Promise<LiquiditySnapshot> {
+    const [existing] = await db.select().from(liquiditySnapshots).where(eq(liquiditySnapshots.year, snapshot.year));
+    if (existing) {
+      const [updated] = await db.update(liquiditySnapshots)
+        .set({
+          bargeld: snapshot.bargeld,
+          festgelder: snapshot.festgelder,
+          darlehenZinslos: snapshot.darlehenZinslos,
+          darlehen: snapshot.darlehen,
+          source: snapshot.source ?? "manual",
+          updatedAt: new Date(),
+        })
+        .where(eq(liquiditySnapshots.year, snapshot.year))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(liquiditySnapshots).values(snapshot).returning();
+    return created;
+  }
+
+  async deleteLiquiditySnapshot(year: number): Promise<void> {
+    await db.delete(liquiditySnapshots).where(eq(liquiditySnapshots.year, year));
+  }
+
+  // Berechnet Bargeld + Festgelder aus accounts.kontoTyp + accountBalances.
+  // Naeherung: End-of-year-Bestand = opening_balance[year+1]. Falls nicht vorhanden:
+  // opening_balance[year] + Summe aller transactions im Jahr.
+  async recalcLiquiditySnapshot(year: number): Promise<LiquiditySnapshot> {
+    const allAccounts = await db.select().from(accounts);
+    const relevant = allAccounts.filter(a => a.kontoTyp === "bargeld" || a.kontoTyp === "festgeld");
+
+    let bargeld = 0;
+    let festgelder = 0;
+
+    for (const acc of relevant) {
+      const [nextYearBalance] = await db.select().from(accountBalances)
+        .where(and(eq(accountBalances.accountId, acc.id), eq(accountBalances.year, year + 1)));
+
+      let endBalance: number;
+      if (nextYearBalance) {
+        endBalance = nextYearBalance.openingBalance;
+      } else {
+        const [currentBalance] = await db.select().from(accountBalances)
+          .where(and(eq(accountBalances.accountId, acc.id), eq(accountBalances.year, year)));
+        const opening = currentBalance?.openingBalance ?? 0;
+        const [{ sum }] = await db.select({
+          sum: sql<number>`COALESCE(SUM(${transactions.amount}), 0)::float`,
+        })
+        .from(transactions)
+        .where(and(
+          eq(transactions.accountId, acc.id),
+          sql`EXTRACT(YEAR FROM ${transactions.date}) = ${year}`,
+        ));
+        endBalance = opening + Number(sum || 0);
+      }
+
+      if (acc.kontoTyp === "bargeld") bargeld += endBalance;
+      else if (acc.kontoTyp === "festgeld") festgelder += endBalance;
+    }
+
+    // Darlehen bleibt beim bereits gespeicherten Wert (immer manuell).
+    const [existing] = await db.select().from(liquiditySnapshots).where(eq(liquiditySnapshots.year, year));
+    const darlehenZinslos = existing?.darlehenZinslos ?? 0;
+    const darlehen = existing?.darlehen ?? 0;
+
+    return await this.upsertLiquiditySnapshot({
+      year,
+      bargeld: Math.round(bargeld * 100) / 100,
+      festgelder: Math.round(festgelder * 100) / 100,
+      darlehenZinslos,
+      darlehen,
+      source: "auto",
+    });
   }
 }
 

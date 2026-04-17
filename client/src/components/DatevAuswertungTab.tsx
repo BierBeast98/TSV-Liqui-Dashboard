@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, Loader2, Trash2, RefreshCw, ChevronRight, ChevronDown } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Upload, Loader2, Trash2, RefreshCw, ChevronRight, ChevronDown, BarChart3, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { LiquideMittelCard } from "./LiquideMittelCard";
 
 const EAS_CATEGORIES = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"] as const;
 type EasCategory = (typeof EAS_CATEGORIES)[number];
@@ -87,6 +89,7 @@ export function DatevAuswertungTab() {
   const [uploading, setUploading] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"pivot" | "liquidity">("pivot");
 
   const { data: yearsData } = useQuery<{ years: number[] }>({
     queryKey: ["/api/datev-bookings/years"],
@@ -294,40 +297,72 @@ export function DatevAuswertungTab() {
   }, [bookings, filterCat, searchText]);
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  const modeToggle = (
+    <ToggleGroup
+      type="single"
+      value={viewMode}
+      onValueChange={(v) => v && setViewMode(v as "pivot" | "liquidity")}
+      className="justify-start"
+    >
+      <ToggleGroupItem value="pivot" data-testid="toggle-pivot" className="gap-2">
+        <BarChart3 className="w-4 h-4" />
+        Pivot-Auswertung
+      </ToggleGroupItem>
+      <ToggleGroupItem value="liquidity" data-testid="toggle-liquidity" className="gap-2">
+        <Wallet className="w-4 h-4" />
+        Liquide Mittel
+      </ToggleGroupItem>
+    </ToggleGroup>
+  );
+
+  if (viewMode === "liquidity") {
+    return (
+      <div className="space-y-6" data-testid="datev-auswertung">
+        {modeToggle}
+        <LiquideMittelCard title="Bestand liquide Mittel (Mehrjahres-Übersicht)" />
+      </div>
+    );
+  }
+
   if (years.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>DATEV-Buchungsstapel importieren</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground mb-4">
-            Lade ein oder mehrere DATEV DTVF-CSV-Dateien hoch (Buchungsstapel und
-            Abschlussbuchungen). Die Buchungen werden automatisch nach E/A-Bereichen
-            (A1…D2) klassifiziert.
-          </p>
-          <div className="flex items-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              multiple
-              onChange={(e) => handleFileUpload(e.target.files)}
-              className="hidden"
-              data-testid="input-datev-upload"
-            />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} data-testid="button-datev-upload">
-              {uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-              DTVF-CSV hochladen
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-6" data-testid="datev-auswertung">
+        {modeToggle}
+        <Card>
+          <CardHeader>
+            <CardTitle>DATEV-Buchungsstapel importieren</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Lade ein oder mehrere DATEV DTVF-CSV-Dateien hoch (Buchungsstapel und
+              Abschlussbuchungen). Die Buchungen werden automatisch nach E/A-Bereichen
+              (A1…D2) klassifiziert.
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                multiple
+                onChange={(e) => handleFileUpload(e.target.files)}
+                className="hidden"
+                data-testid="input-datev-upload"
+              />
+              <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} data-testid="button-datev-upload">
+                {uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                DTVF-CSV hochladen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6" data-testid="datev-auswertung">
+      {modeToggle}
       {/* Header: Jahr + Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">

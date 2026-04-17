@@ -21,6 +21,9 @@ export const accounts = pgTable("accounts", {
   iban: text("iban").notNull().unique(),
   name: text("name").notNull(),
   datevKonto: text("datev_konto"),
+  // Klassifizierung fuer Liquide-Mittel-Auswertung:
+  // 'bargeld' = Kassen + Girokonten, 'festgeld' = Spar-/Festgeldkonten, null = nicht in Liquiditaet einbezogen
+  kontoTyp: text("konto_typ"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -191,6 +194,24 @@ export interface LiquideMittelSummary {
   veraenderung: number;
   details: SummenSaldenEntry[];
 }
+
+// === Liquiditaets-Snapshots (Bestand liquide Mittel pro Jahr) ===
+// Ein Datensatz pro Jahr, mit 4 Kategorien analog zum JHV-Diagramm.
+// source: 'auto' = aus accounts/accountBalances berechnet, 'manual' = manuell gepflegt (historische Jahre).
+
+export const liquiditySnapshots = pgTable("liquidity_snapshots", {
+  year: integer("year").primaryKey(),
+  bargeld: real("bargeld").notNull().default(0),
+  festgelder: real("festgelder").notNull().default(0),
+  darlehenZinslos: real("darlehen_zinslos").notNull().default(0), // negativ
+  darlehen: real("darlehen").notNull().default(0),                // negativ
+  source: text("source").notNull().default("manual"),             // 'manual' | 'auto'
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLiquiditySnapshotSchema = createInsertSchema(liquiditySnapshots).omit({ updatedAt: true });
+export type LiquiditySnapshot = typeof liquiditySnapshots.$inferSelect;
+export type InsertLiquiditySnapshot = z.infer<typeof insertLiquiditySnapshotSchema>;
 
 // === Events / Veranstaltungen (for tracking income/expenses at festivals, etc.) ===
 

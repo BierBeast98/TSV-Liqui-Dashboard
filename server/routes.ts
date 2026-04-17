@@ -121,6 +121,20 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/accounts/:id/konto-typ", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { kontoTyp } = req.body ?? {};
+      const valid = ["bargeld", "festgeld", null];
+      if (!valid.includes(kontoTyp)) return res.status(400).json({ message: "Ungültiger Kontotyp" });
+      const account = await storage.updateAccount(id, { kontoTyp });
+      res.json(account);
+    } catch (e) {
+      console.error("Error updating kontoTyp:", e);
+      res.status(500).json({ message: "Fehler beim Aktualisieren" });
+    }
+  });
+
   app.patch("/api/accounts/:id", async (req, res) => {
     try {
       const id = Number(req.params.id);
@@ -1427,6 +1441,50 @@ export async function registerRoutes(
     if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
     const updated = await storage.reclassifyDatevBookings(year);
     res.json({ updated });
+  });
+
+  // === Liquiditaets-Snapshots (Bestand liquide Mittel) ===
+  app.get("/api/liquidity", async (_req, res) => {
+    const snapshots = await storage.getLiquiditySnapshots();
+    res.json(snapshots);
+  });
+
+  app.post("/api/liquidity", async (req, res) => {
+    try {
+      const { year, bargeld, festgelder, darlehenZinslos, darlehen, source } = req.body ?? {};
+      if (!year) return res.status(400).json({ error: "year erforderlich" });
+      const snap = await storage.upsertLiquiditySnapshot({
+        year: Number(year),
+        bargeld: Number(bargeld ?? 0),
+        festgelder: Number(festgelder ?? 0),
+        darlehenZinslos: Number(darlehenZinslos ?? 0),
+        darlehen: Number(darlehen ?? 0),
+        source: source ?? "manual",
+      });
+      res.status(201).json(snap);
+    } catch (e) {
+      console.error("Error upserting liquidity snapshot:", e);
+      res.status(500).json({ error: "Fehler beim Speichern" });
+    }
+  });
+
+  app.post("/api/liquidity/:year/recalc", async (req, res) => {
+    try {
+      const year = parseInt(req.params.year, 10);
+      if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+      const snap = await storage.recalcLiquiditySnapshot(year);
+      res.json(snap);
+    } catch (e) {
+      console.error("Error recalculating liquidity:", e);
+      res.status(500).json({ error: "Fehler bei der Neuberechnung" });
+    }
+  });
+
+  app.delete("/api/liquidity/:year", async (req, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!year) return res.status(400).json({ error: "Ungültiges Jahr" });
+    await storage.deleteLiquiditySnapshot(year);
+    res.json({ success: true });
   });
 
   return httpServer;

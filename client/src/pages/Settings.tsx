@@ -176,6 +176,17 @@ export default function Settings() {
     onError: () => toast({ title: "Fehler", description: "IBAN konnte nicht gespeichert werden.", variant: "destructive" }),
   });
 
+  const kontoTypMutation = useMutation({
+    mutationFn: async ({ id, kontoTyp }: { id: number; kontoTyp: string | null }) =>
+      apiRequest("PATCH", `/api/accounts/${id}/konto-typ`, { kontoTyp }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/liquidity"] });
+      toast({ title: "Kontotyp gespeichert" });
+    },
+    onError: () => toast({ title: "Fehler", description: "Kontotyp konnte nicht gespeichert werden.", variant: "destructive" }),
+  });
+
   const mergeMutation = useMutation({
     mutationFn: async ({ sourceId, targetId }: { sourceId: number; targetId: number }) =>
       apiRequest("POST", `/api/accounts/${sourceId}/merge`, { targetId }),
@@ -376,6 +387,27 @@ export default function Settings() {
                       >
                         {ibanMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
                       </Button>
+                    </div>
+
+                    {/* Kontotyp row (fuer Liquide-Mittel-Auswertung) */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-16 shrink-0">Typ:</span>
+                      <Select
+                        value={(account as any).kontoTyp ?? "none"}
+                        onValueChange={(v) => kontoTypMutation.mutate({ id: account.id, kontoTyp: v === "none" ? null : v })}
+                      >
+                        <SelectTrigger className="w-48 h-8 text-xs">
+                          <SelectValue placeholder="Nicht zugeordnet" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">— nicht zugeordnet —</SelectItem>
+                          <SelectItem value="bargeld">Bargeld (Kasse / Giro)</SelectItem>
+                          <SelectItem value="festgeld">Festgeld / Sparkonto</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-xs text-muted-foreground">
+                        Fuer „Liquide Mittel"-Auswertung
+                      </span>
                     </div>
                   </div>
                 ))}

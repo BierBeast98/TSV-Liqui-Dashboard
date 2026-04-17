@@ -12,6 +12,7 @@ import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DatevAuswertungTab } from "@/components/DatevAuswertungTab";
+import { LiquideMittelCard } from "@/components/LiquideMittelCard";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -1012,6 +1013,9 @@ export default function Kassenbericht() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Section 1b: Liquide Mittel */}
+            <LiquideMittelCard defaultHighlightYears={[compareYear, displayYear]} />
 
             {/* Section 2: BarChart */}
             <Card>
