@@ -2,7 +2,7 @@ import { useState, useMemo, ReactNode, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Loader2, Info, Eye, EyeOff, Link2, Unlink2, ArrowUpDown,
@@ -719,6 +719,18 @@ export default function Kassenbericht() {
   const isLoading = l1 || l2;
   const hiddenCount = useMemo(() => allMatched.filter((i) => hiddenItems.has(i.key)).length, [allMatched, hiddenItems]);
 
+  // Active fiscal area as chart letter ("A." / "B." / ...) for Cell opacity highlight
+  const activeLetter = AREA_LETTERS[FISCAL_AREAS.findIndex((fa) => fa.name === activeTab)] + ".";
+
+  // Click on a bar-group in the chart → switch active tab
+  const handleChartClick = (state: { activeLabel?: string } | null) => {
+    const label = state?.activeLabel;
+    if (!label) return;
+    const letter = label.replace(".", "");
+    const idx = AREA_LETTERS.indexOf(letter);
+    if (idx >= 0) setActiveTab(FISCAL_AREAS[idx].name);
+  };
+
   // ── Row rendering helper ───────────────────────────────────────────────────
 
   const renderRow = (item: MatchedLineItem, sectionMax: number): ReactNode => {
@@ -1020,39 +1032,11 @@ export default function Kassenbericht() {
               </CardContent>
             </Card>
 
-            {/* Section 1b: Liquide Mittel */}
-            <LiquideMittelCard defaultHighlightYears={[compareYear, displayYear]} />
-
-            {/* Section 2: BarChart */}
-            <Card>
-              <CardHeader><CardTitle>Jahresvergleich nach Tätigkeitsbereichen</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} barGap={2} barCategoryGap="25%" margin={{ top: 4, right: 16, left: 16, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis
-                        tickFormatter={(v) => new Intl.NumberFormat("de-DE", { notation: "compact", maximumFractionDigits: 0 }).format(v)}
-                        tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={60}
-                      />
-                      <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={(l, p) => p?.[0]?.payload.fullName ?? l} />
-                      <Legend />
-                      <Bar dataKey={`income_${compareYear}`} name={`Einnahmen ${compareYear}`} fill="hsl(142 76% 36% / 0.35)" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`expenses_${compareYear}`} name={`Ausgaben ${compareYear}`} fill="hsl(0 72% 51% / 0.35)" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`income_${displayYear}`} name={`Einnahmen ${displayYear}`} fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey={`expenses_${displayYear}`} name={`Ausgaben ${displayYear}`} fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Section 3: Detailvergleich */}
+            {/* Section 2+3: Tätigkeitsbereiche-Vergleich (Chart + Detail) */}
             <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <CardTitle>Detailvergleich Einzelpositionen</CardTitle>
+                  <CardTitle>Tätigkeitsbereiche-Vergleich</CardTitle>
                   <div className="flex items-center gap-2 flex-wrap">
                     {hiddenCount > 0 && (
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-muted-foreground" onClick={() => setShowHidden((v) => !v)}>
@@ -1072,7 +1056,51 @@ export default function Kassenbericht() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartData}
+                      barGap={2}
+                      barCategoryGap="25%"
+                      margin={{ top: 4, right: 16, left: 16, bottom: 4 }}
+                      onClick={handleChartClick}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        tickFormatter={(v) => new Intl.NumberFormat("de-DE", { notation: "compact", maximumFractionDigits: 0 }).format(v)}
+                        tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={60}
+                      />
+                      <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={(l, p) => p?.[0]?.payload.fullName ?? l} cursor={{ fill: "hsl(var(--muted) / 0.4)" }} />
+                      <Legend />
+                      <Bar dataKey={`income_${compareYear}`} name={`Einnahmen ${compareYear}`} fill="hsl(142 76% 36% / 0.35)" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry, i) => (
+                          <Cell key={`ci-${i}`} fillOpacity={entry.name === activeLetter ? 1 : 0.35} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey={`expenses_${compareYear}`} name={`Ausgaben ${compareYear}`} fill="hsl(0 72% 51% / 0.35)" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry, i) => (
+                          <Cell key={`ce-${i}`} fillOpacity={entry.name === activeLetter ? 1 : 0.35} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey={`income_${displayYear}`} name={`Einnahmen ${displayYear}`} fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry, i) => (
+                          <Cell key={`di-${i}`} fillOpacity={entry.name === activeLetter ? 1 : 0.35} />
+                        ))}
+                      </Bar>
+                      <Bar dataKey={`expenses_${displayYear}`} name={`Ausgaben ${displayYear}`} fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry, i) => (
+                          <Cell key={`de-${i}`} fillOpacity={entry.name === activeLetter ? 1 : 0.35} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <Separator />
+
                 {!hasLineItems ? (
                   <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 text-sm text-muted-foreground">
                     <Info className="w-4 h-4 mt-0.5 shrink-0" />
@@ -1118,6 +1146,9 @@ export default function Kassenbericht() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Section 4: Liquide Mittel (Mehrjahres-Uebersicht) */}
+            <LiquideMittelCard defaultHighlightYears={[compareYear, displayYear]} />
           </>
         )}
           </TabsContent>
