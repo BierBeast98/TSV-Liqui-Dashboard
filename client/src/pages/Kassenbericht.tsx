@@ -995,13 +995,18 @@ export default function Kassenbericht() {
               <CardContent className="pt-6">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   {[
-                    { label: "Gesamteinnahmen", cur: displayReport?.totalIncome ?? 0, prev: compareReport?.totalIncome },
-                    { label: "Gesamtausgaben", cur: displayReport?.totalExpenses ?? 0, prev: compareReport?.totalExpenses },
-                    { label: "Jahresergebnis", cur: displayReport?.totalNet ?? 0, prev: compareReport?.totalNet, net: true },
-                  ].map(({ label, cur, prev, net }) => (
+                    { label: "Gesamteinnahmen", cur: displayReport?.totalIncome ?? 0, prev: compareReport?.totalIncome, tone: "positive" as const },
+                    { label: "Gesamtausgaben", cur: displayReport?.totalExpenses ?? 0, prev: compareReport?.totalExpenses, tone: "negative" as const },
+                    { label: "Jahresergebnis", cur: displayReport?.totalNet ?? 0, prev: compareReport?.totalNet, net: true, tone: "signed" as const },
+                  ].map(({ label, cur, prev, net, tone }) => {
+                    const isPositive = tone === "positive" || (tone === "signed" && cur >= 0);
+                    const colorClass = isPositive
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400";
+                    return (
                     <div key={label}>
                       <div className="text-sm text-muted-foreground mb-1">{label} {displayYear}</div>
-                      <div className={`text-2xl font-bold ${net ? "flex items-center justify-center gap-1 " : ""}${cur >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                      <div className={`text-2xl font-bold ${net ? "flex items-center justify-center gap-1 " : ""}${colorClass}`}>
                         {net && (cur >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />)}
                         {formatCurrency(cur)}
                       </div>
@@ -1009,7 +1014,8 @@ export default function Kassenbericht() {
                         <div className="text-xs text-muted-foreground mt-1">{compareYear}: {formatCurrency(prev)}</div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
