@@ -966,23 +966,46 @@ export async function registerRoutes(
   app.get("/api/report/euer", async (req, res) => {
     const year = Number(req.query.year) || 2024;
     const pdfReport = await storage.getEuerReport(year);
-    
+
     if (pdfReport) {
-      // Return PDF-based data in FiscalAreaReport format
+      // Base-Werte aus den PDF-geparsten Summen
+      const baseAreas = [
+        { name: 'ideell', label: 'A. Ideeller Tätigkeitsbereich', income: pdfReport.ideellIncome || 0, expenses: pdfReport.ideellExpenses || 0 },
+        { name: 'vermoegensverwaltung', label: 'B. Vermögensverwaltung', income: pdfReport.vermoegenIncome || 0, expenses: pdfReport.vermoegenExpenses || 0 },
+        { name: 'zweckbetrieb', label: 'C. Zweckbetriebe', income: pdfReport.zweckbetriebIncome || 0, expenses: pdfReport.zweckbetriebExpenses || 0 },
+        { name: 'wirtschaftlich', label: 'D. Wirtschaftlicher Geschäftsbetrieb', income: pdfReport.wirtschaftlichIncome || 0, expenses: pdfReport.wirtschaftlichExpenses || 0 },
+      ];
+
+      // Falls Einzelposten vorhanden und deren Netto ≈ PDF-Netto (≤50 € Abweichung),
+      // nutzen wir die exakten Summen aus den Einzelposten pro Bereich.
+      const items = await storage.getEuerLineItems(pdfReport.id);
+      const NET_TOLERANCE = 50;
+      const sumByArea = new Map<string, { income: number; expenses: number }>();
+      for (const it of items) {
+        const entry = sumByArea.get(it.fiscalArea) ?? { income: 0, expenses: 0 };
+        if (it.type === 'income') entry.income += Number(it.amount);
+        else entry.expenses += Number(it.amount);
+        sumByArea.set(it.fiscalArea, entry);
+      }
+      const areas = baseAreas.map((a) => {
+        const s = sumByArea.get(a.name);
+        const baseNet = a.income - a.expenses;
+        if (s && Math.abs((s.income - s.expenses) - baseNet) <= NET_TOLERANCE) {
+          return { ...a, income: s.income, expenses: s.expenses, net: s.income - s.expenses };
+        }
+        return { ...a, net: baseNet };
+      });
+      const totalIncome = areas.reduce((s, a) => s + a.income, 0);
+      const totalExpenses = areas.reduce((s, a) => s + a.expenses, 0);
       res.json({
         year,
         source: 'pdf',
         sourceFileName: pdfReport.sourceFileName,
         uploadedAt: pdfReport.uploadedAt,
-        areas: [
-          { name: 'ideell', label: 'A. Ideeller Tätigkeitsbereich', income: pdfReport.ideellIncome || 0, expenses: pdfReport.ideellExpenses || 0, net: (pdfReport.ideellIncome || 0) - (pdfReport.ideellExpenses || 0) },
-          { name: 'vermoegensverwaltung', label: 'B. Vermögensverwaltung', income: pdfReport.vermoegenIncome || 0, expenses: pdfReport.vermoegenExpenses || 0, net: (pdfReport.vermoegenIncome || 0) - (pdfReport.vermoegenExpenses || 0) },
-          { name: 'zweckbetrieb', label: 'C. Zweckbetriebe', income: pdfReport.zweckbetriebIncome || 0, expenses: pdfReport.zweckbetriebExpenses || 0, net: (pdfReport.zweckbetriebIncome || 0) - (pdfReport.zweckbetriebExpenses || 0) },
-          { name: 'wirtschaftlich', label: 'D. Wirtschaftlicher Geschäftsbetrieb', income: pdfReport.wirtschaftlichIncome || 0, expenses: pdfReport.wirtschaftlichExpenses || 0, net: (pdfReport.wirtschaftlichIncome || 0) - (pdfReport.wirtschaftlichExpenses || 0) },
-        ],
-        totalIncome: (pdfReport.ideellIncome || 0) + (pdfReport.vermoegenIncome || 0) + (pdfReport.zweckbetriebIncome || 0) + (pdfReport.wirtschaftlichIncome || 0),
-        totalExpenses: (pdfReport.ideellExpenses || 0) + (pdfReport.vermoegenExpenses || 0) + (pdfReport.zweckbetriebExpenses || 0) + (pdfReport.wirtschaftlichExpenses || 0),
-        totalNet: ((pdfReport.ideellIncome || 0) + (pdfReport.vermoegenIncome || 0) + (pdfReport.zweckbetriebIncome || 0) + (pdfReport.wirtschaftlichIncome || 0)) - ((pdfReport.ideellExpenses || 0) + (pdfReport.vermoegenExpenses || 0) + (pdfReport.zweckbetriebExpenses || 0) + (pdfReport.wirtschaftlichExpenses || 0)),
+        areas,
+        totalIncome,
+        totalExpenses,
+        totalNet: totalIncome - totalExpenses,
       });
     } else {
       // Fallback to transaction-calculated data

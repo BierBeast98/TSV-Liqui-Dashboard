@@ -14,9 +14,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DatevAuswertungTab } from "@/components/DatevAuswertungTab";
 import { LiquideMittelCard } from "@/components/LiquideMittelCard";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -68,6 +65,8 @@ interface MatchedLineItem {
   key: string;
   displayDescription: string;
   compareDescription: string;
+  displayAccountNumber?: string;   // SKR account from display year
+  compareAccountNumber?: string;   // SKR account from compare year
   fiscalArea: string;
   type: "income" | "expense";
   compareAmount: number;
@@ -170,6 +169,8 @@ function matchLineItems(
       key: `${primaryD.fiscalArea}:${primaryD.type}:${primaryD.description}`,
       displayDescription: primaryD.description,
       compareDescription: primaryC.description,
+      displayAccountNumber: primaryD.accountNumber,
+      compareAccountNumber: primaryC.accountNumber,
       fiscalArea: primaryD.fiscalArea,
       type: primaryD.type as "income" | "expense",
       compareAmount,
@@ -202,6 +203,8 @@ function matchLineItems(
       key: `${d.fiscalArea}:${d.type}:${d.description}`,
       displayDescription: d.description,
       compareDescription: cItem.description,
+      displayAccountNumber: d.accountNumber,
+      compareAccountNumber: cItem.accountNumber,
       fiscalArea: d.fiscalArea,
       type: d.type as "income" | "expense",
       compareAmount: cItem.amount,
@@ -245,6 +248,8 @@ function matchLineItems(
       key: `${d.fiscalArea}:${d.type}:${d.description}`,
       displayDescription: d.description,
       compareDescription: c.description,
+      displayAccountNumber: d.accountNumber,
+      compareAccountNumber: c.accountNumber,
       fiscalArea: d.fiscalArea,
       type: d.type as "income" | "expense",
       compareAmount: c.amount,
@@ -263,6 +268,7 @@ function matchLineItems(
       key: `${d.fiscalArea}:${d.type}:${d.description}:neu`,
       displayDescription: d.description,
       compareDescription: "",
+      displayAccountNumber: d.accountNumber,
       fiscalArea: d.fiscalArea,
       type: d.type as "income" | "expense",
       compareAmount: 0,
@@ -281,6 +287,7 @@ function matchLineItems(
       key: `${c.fiscalArea}:${c.type}:${c.description}:entf`,
       displayDescription: "",
       compareDescription: c.description,
+      compareAccountNumber: c.accountNumber,
       fiscalArea: c.fiscalArea,
       type: c.type as "income" | "expense",
       compareAmount: c.amount,
@@ -292,15 +299,17 @@ function matchLineItems(
     });
   }
 
-  return result.sort(
-    (a, b) =>
-      a.fiscalArea.localeCompare(b.fiscalArea) ||
-      (a.type === "income" ? -1 : 1) ||
-      (b.matched ? 1 : 0) - (a.matched ? 1 : 0) ||
-      (a.displayDescription || a.compareDescription).localeCompare(
-        b.displayDescription || b.compareDescription,
-      ),
-  );
+  return result.sort((a, b) => {
+    if (a.fiscalArea !== b.fiscalArea) return a.fiscalArea.localeCompare(b.fiscalArea);
+    if (a.type !== b.type) return a.type === "income" ? -1 : 1;
+    // Sort numerically by new DATEV account number; fall back to old one for ENTF rows
+    const accA = Number(a.displayAccountNumber ?? a.compareAccountNumber ?? "0") || 0;
+    const accB = Number(b.displayAccountNumber ?? b.compareAccountNumber ?? "0") || 0;
+    if (accA !== accB) return accA - accB;
+    return (a.displayDescription || a.compareDescription).localeCompare(
+      b.displayDescription || b.compareDescription,
+    );
+  });
 }
 
 // ── localStorage helpers (fallback / cache) ───────────────────────────────────
@@ -689,9 +698,49 @@ export default function Kassenbericht() {
 
   // ── Derived Data ───────────────────────────────────────────────────────────
 
+  // Wenn die Einzelposten pro Bereich vorhanden sind und deren Netto-Saldo ≈ dem
+  // PDF-gemeldeten Netto ist, nutzen wir die Summen aus den Einzelposten (sie
+  // stimmen dann exakt mit der Detail-Tabelle überein). Weicht der Saldo stark ab,
+  // sind Einzelposten vom Parser fehlkategorisiert — dann behalten wir die
+  // PDF-Summen, die näher am offiziellen Jahresergebnis sind.
+  const NET_RECONCILE_TOLERANCE = 50;
+  const reconcileReport = (
+    report: FiscalAreaReport | undefined,
+    items: EuerLineItem[] | undefined,
+  ): FiscalAreaReport | undefined => {
+    if (!report) return report;
+    if (!items || items.length === 0) return report;
+    const sumByArea = new Map<string, { income: number; expenses: number }>();
+    for (const it of items) {
+      const entry = sumByArea.get(it.fiscalArea) ?? { income: 0, expenses: 0 };
+      if (it.type === "income") entry.income += it.amount;
+      else entry.expenses += it.amount;
+      sumByArea.set(it.fiscalArea, entry);
+    }
+    const areas = report.areas.map((area) => {
+      const s = sumByArea.get(area.name);
+      if (!s) return area;
+      const itemsNet = s.income - s.expenses;
+      if (Math.abs(itemsNet - area.net) > NET_RECONCILE_TOLERANCE) return area;
+      return { ...area, income: s.income, expenses: s.expenses, net: itemsNet };
+    });
+    const totalIncome = areas.reduce((a, x) => a + x.income, 0);
+    const totalExpenses = areas.reduce((a, x) => a + x.expenses, 0);
+    return { ...report, areas, totalIncome, totalExpenses, totalNet: totalIncome - totalExpenses };
+  };
+
+  const displayReportFixed = useMemo(
+    () => reconcileReport(displayReport, displayItems),
+    [displayReport, displayItems],
+  );
+  const compareReportFixed = useMemo(
+    () => reconcileReport(compareReport, compareItems),
+    [compareReport, compareItems],
+  );
+
   const chartData = useMemo(
-    () => displayReport?.areas.map((area) => {
-      const ca = compareReport?.areas.find((a) => a.name === area.name);
+    () => displayReportFixed?.areas.map((area) => {
+      const ca = compareReportFixed?.areas.find((a) => a.name === area.name);
       return {
         name: area.label.split(".")[0] + ".",
         fullName: area.label,
@@ -701,7 +750,7 @@ export default function Kassenbericht() {
         [`expenses_${displayYear}`]: area.expenses,
       };
     }) ?? [],
-    [displayReport, compareReport, displayYear, compareYear],
+    [displayReportFixed, compareReportFixed, displayYear, compareYear],
   );
 
   const allMatched = useMemo(() => {
@@ -733,10 +782,11 @@ export default function Kassenbericht() {
 
   // ── Row rendering helper ───────────────────────────────────────────────────
 
-  const renderRow = (item: MatchedLineItem, sectionMax: number): ReactNode => {
+  const renderRow = (item: MatchedLineItem): ReactNode => {
     const isHidden = hiddenItems.has(item.key);
-    const isNeu = !item.matched && item.displayAmount > 0;
-    const isEntf = !item.matched && item.compareAmount > 0;
+    const isNeu = !item.matched && item.displayAmount !== 0;
+    const isEntf = !item.matched && item.compareAmount !== 0;
+    const isIncome = item.type === "income";
 
     // Abweichungs-Schwellen
     const absPct = Math.abs(item.deltaPercent ?? 0);
@@ -746,8 +796,13 @@ export default function Kassenbericht() {
     const isBadDelta = item.type === "expense" ? item.delta > 0 : item.delta < 0;
     const deltaColorClass = isGoodDelta ? "text-green-600 dark:text-green-400" : isBadDelta ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
     const deltaWeightClass = isBigMover ? "font-bold" : isMediumMover ? "font-medium" : "font-normal text-muted-foreground/70";
-    const rowBg = isBigMover
-      ? isGoodDelta ? "bg-green-50/40 dark:bg-green-900/10" : "bg-red-50/40 dark:bg-red-900/10"
+
+    // Item background tint: subtle by default, stronger when big mover
+    const baseTint = isIncome
+      ? "bg-green-50/40 hover:bg-green-50 dark:bg-green-900/10 dark:hover:bg-green-900/20"
+      : "bg-red-50/40 hover:bg-red-50 dark:bg-red-900/10 dark:hover:bg-red-900/20";
+    const moverAccent = isBigMover
+      ? (isGoodDelta ? "ring-1 ring-green-300/50" : "ring-1 ring-red-300/50")
       : "";
 
     // Delta display
@@ -789,146 +844,168 @@ export default function Kassenbericht() {
           : null
       : null;
 
+    // Konto-Nr-Anzeige: "4000" wenn gleich, "4000 → 4001" wenn unterschiedlich, sonst nur die vorhandene
+    const dn = item.displayAccountNumber;
+    const cn = item.compareAccountNumber;
+    const renderAccount = () => {
+      if (dn && cn && dn !== cn) {
+        return (
+          <span className="inline-flex items-baseline gap-0.5">
+            <span className="text-muted-foreground/60">{cn}</span>
+            <span className="text-muted-foreground/40">→</span>
+            <span>{dn}</span>
+          </span>
+        );
+      }
+      return <span>{dn || cn || ""}</span>;
+    };
+
     return (
-      <TableRow key={item.key} className={`group/row ${isHidden ? "opacity-40" : ""} ${rowBg}`}>
-        <TableCell className="pl-6">
-          <div className="font-medium">
+      <div
+        key={item.key}
+        className={`group/row flex items-center gap-3 py-2 pl-3 pr-2 rounded-md ${baseTint} ${moverAccent} ${isHidden ? "opacity-40" : ""}`}
+      >
+        <span className="text-xs font-mono tabular-nums text-muted-foreground w-20 shrink-0">
+          {renderAccount()}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">
             {item.allDisplayDescs && item.allDisplayDescs.length > 1
               ? item.allDisplayDescs.join(" · ")
               : (item.displayDescription || item.compareDescription)}
           </div>
           {subtitle && (
-            <div className="text-xs text-muted-foreground/40 group-hover/row:text-muted-foreground/70 italic mt-0.5 transition-colors duration-150">
+            <div className="text-xs text-muted-foreground/40 group-hover/row:text-muted-foreground/70 italic truncate transition-colors duration-150">
               {subtitle}
             </div>
           )}
-        </TableCell>
+        </div>
 
-        <TableCell className="text-right text-muted-foreground">
-          {item.compareAmount > 0 ? formatCurrency(item.compareAmount) : <span className="text-muted-foreground/40">—</span>}
-        </TableCell>
+        <span className="text-right text-sm text-muted-foreground tabular-nums w-28 shrink-0">
+          {item.compareAmount !== 0 ? formatCurrency(item.compareAmount) : <span className="text-muted-foreground/40">—</span>}
+        </span>
 
-        <TableCell className="text-right font-medium">
-          {item.displayAmount > 0 ? formatCurrency(item.displayAmount) : <span className="text-muted-foreground/40">—</span>}
-        </TableCell>
+        <span className="text-right text-sm font-medium tabular-nums w-28 shrink-0">
+          {item.displayAmount !== 0 ? formatCurrency(item.displayAmount) : <span className="text-muted-foreground/40">—</span>}
+        </span>
 
-        <TableCell className="text-right">{renderDelta()}</TableCell>
+        <div className="text-right text-sm w-32 shrink-0">{renderDelta()}</div>
 
-        {/* Action buttons — hidden in presentation mode */}
         {!presentationMode && (
-          <TableCell className="p-0 pr-1">
-            <div className="flex items-center gap-0.5">
-              {(isNeu || isEntf || item.matchType === "fuzzy") && (
-                <button
-                  onClick={() => setLinkingItem(item)}
-                  className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground/50 hover:text-primary transition-colors"
-                  title="Verknüpfen"
-                >
-                  <Link2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {item.matched && (item.matchType === "manual" || item.matchType === "fuzzy") && (
-                <button
-                  onClick={() => {
-                    if (item.matchType === "manual" && item.manualId) {
-                      removeMapping(item.manualId);
-                    } else if (item.matchType === "fuzzy") {
-                      blockPair(item.displayDescription, item.compareDescription, item.fiscalArea, item.type);
-                    }
-                  }}
-                  className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive transition-colors"
-                  title={item.matchType === "manual" ? "Verknüpfung aufheben" : "Automatische Zuordnung ablehnen"}
-                >
-                  <Unlink2 className="w-3.5 h-3.5" />
-                </button>
-              )}
+          <div className="flex items-center gap-0.5 w-20 shrink-0 justify-end">
+            {(isNeu || isEntf || item.matchType === "fuzzy") && (
               <button
-                onClick={() => toggleHide(item.key)}
-                className="p-1.5 rounded hover:bg-muted text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                title={isHidden ? "Einblenden" : "Ausblenden"}
+                onClick={() => setLinkingItem(item)}
+                className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground/50 hover:text-primary transition-colors"
+                title="Verknüpfen"
               >
-                {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <Link2 className="w-3.5 h-3.5" />
               </button>
-            </div>
-          </TableCell>
+            )}
+            {item.matched && (item.matchType === "manual" || item.matchType === "fuzzy") && (
+              <button
+                onClick={() => {
+                  if (item.matchType === "manual" && item.manualId) {
+                    removeMapping(item.manualId);
+                  } else if (item.matchType === "fuzzy") {
+                    blockPair(item.displayDescription, item.compareDescription, item.fiscalArea, item.type);
+                  }
+                }}
+                className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive transition-colors"
+                title={item.matchType === "manual" ? "Verknüpfung aufheben" : "Automatische Zuordnung ablehnen"}
+              >
+                <Unlink2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={() => toggleHide(item.key)}
+              className="p-1.5 rounded hover:bg-muted text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+              title={isHidden ? "Einblenden" : "Ausblenden"}
+            >
+              {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
         )}
-      </TableRow>
+      </div>
     );
   };
 
   // ── Section rendering helper ───────────────────────────────────────────────
 
   const renderSections = (): ReactNode[] => {
-    const rows: ReactNode[] = [];
+    const blocks: ReactNode[] = [];
     const areaItems = filteredItems; // already filtered to activeTab
-    const colSpan = presentationMode ? 4 : 5;
+    // Die Summenzeile soll alle Positionen des Bereichs enthalten — auch die,
+    // die der Nutzer aktuell ausgeblendet hat. Dafür greifen wir auf allMatched zu.
+    const areaAllItems = allMatched.filter((i) => i.fiscalArea === activeTab);
 
     for (const type of ["income", "expense"] as const) {
       const typeItems = areaItems.filter((i) => i.type === type);
       if (typeItems.length === 0) continue;
+      const allTypeItems = areaAllItems.filter((i) => i.type === type);
       const isIncome = type === "income";
       const sectionKey = `${activeTab}-${type}`;
       const isCollapsed = collapsedSections.has(sectionKey);
 
-      const sumC = typeItems.reduce((s, i) => s + i.compareAmount, 0);
-      const sumD = typeItems.reduce((s, i) => s + i.displayAmount, 0);
+      const sumC = allTypeItems.reduce((s, i) => s + i.compareAmount, 0);
+      const sumD = allTypeItems.reduce((s, i) => s + i.displayAmount, 0);
       const sumDelta = sumD - sumC;
       const sumPct = sumC !== 0 ? (sumDelta / Math.abs(sumC)) * 100 : null;
-      const sectionMax = Math.max(...typeItems.map((i) => Math.max(i.displayAmount, i.compareAmount)), 1);
 
-      // Spacer before Ausgaben
-      if (!isIncome) {
-        rows.push(
-          <TableRow key={`spacer-${activeTab}`} className="hover:bg-transparent">
-            <TableCell colSpan={colSpan} className="py-2 border-0" />
-          </TableRow>,
-        );
-      }
+      const sumDeltaColor = (isIncome ? sumDelta > 0 : sumDelta < 0)
+        ? "text-green-600"
+        : (isIncome ? sumDelta < 0 : sumDelta > 0)
+          ? "text-red-600"
+          : "text-muted-foreground";
 
-      // Collapsible section header
-      rows.push(
-        <TableRow
-          key={`${activeTab}-${type}-hdr`}
-          className={`cursor-pointer select-none ${isIncome ? "bg-green-50/60 dark:bg-green-900/10 hover:bg-green-100/60" : "bg-red-50/60 dark:bg-red-900/10 hover:bg-red-100/60"}`}
-          onClick={() => toggleSection(sectionKey)}
-        >
-          <TableCell colSpan={colSpan} className="py-2 pl-4">
-            <span className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${isIncome ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
-              {isCollapsed
-                ? <ChevronRight className="w-3.5 h-3.5" />
-                : <ChevronDown className="w-3.5 h-3.5" />}
+      blocks.push(
+        <div key={`${activeTab}-${type}-section`} className="space-y-1">
+          {/* Section header */}
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer select-none ${isIncome ? "bg-green-100/70 hover:bg-green-100 dark:bg-green-900/20" : "bg-red-100/70 hover:bg-red-100 dark:bg-red-900/20"}`}
+            onClick={() => toggleSection(sectionKey)}
+          >
+            {isCollapsed
+              ? <ChevronRight className="w-3.5 h-3.5" />
+              : <ChevronDown className="w-3.5 h-3.5" />}
+            {isIncome
+              ? <TrendingUp className="w-4 h-4 text-green-700 dark:text-green-400" />
+              : <TrendingDown className="w-4 h-4 text-red-700 dark:text-red-400" />}
+            <span className={`text-sm font-semibold ${isIncome ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
               {isIncome ? "Einnahmen" : "Ausgaben"}
-              <span className="font-normal normal-case tracking-normal text-muted-foreground/60 ml-1">
-                {typeItems.length} Positionen
-              </span>
             </span>
-          </TableCell>
-        </TableRow>,
-      );
+            <span className="text-xs text-muted-foreground/70 font-normal">
+              {typeItems.length} Positionen
+            </span>
+          </div>
 
-      // Items (hidden when collapsed)
-      if (!isCollapsed) {
-        for (const item of typeItems) rows.push(renderRow(item, sectionMax));
-      }
+          {/* Items */}
+          {!isCollapsed && (
+            <div className="space-y-1">
+              {typeItems.map((item) => renderRow(item))}
+            </div>
+          )}
 
-      // Sum row (always visible)
-      rows.push(
-        <TableRow key={`${activeTab}-${type}-sub`} className={isIncome ? "bg-green-50 dark:bg-green-900/20 font-semibold hover:bg-green-50 border-t border-green-200/60" : "bg-red-50 dark:bg-red-900/20 font-semibold hover:bg-red-50 border-t border-red-200/60"}>
-          <TableCell className="pl-6 text-sm">{isIncome ? "Summe Einnahmen" : "Summe Ausgaben"}</TableCell>
-          <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(sumC)}</TableCell>
-          <TableCell className={`text-right text-sm ${isIncome ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(sumD)}</TableCell>
-          <TableCell className="text-right text-sm">
-            <span className={`font-semibold ${(isIncome ? sumDelta > 0 : sumDelta < 0) ? "text-green-600" : (isIncome ? sumDelta < 0 : sumDelta > 0) ? "text-red-600" : "text-muted-foreground"}`}>
+          {/* Sum row */}
+          <div className={`flex items-center gap-3 py-2 pl-3 pr-2 rounded-md font-semibold ${isIncome ? "bg-green-100 dark:bg-green-900/30 border border-green-200/60" : "bg-red-100 dark:bg-red-900/30 border border-red-200/60"}`}>
+            <span className="w-20 shrink-0" />
+            <span className={`flex-1 text-sm ${isIncome ? "text-green-800 dark:text-green-300" : "text-red-800 dark:text-red-300"}`}>
+              Summe {isIncome ? "Einnahmen" : "Ausgaben"}
+            </span>
+            <span className="text-right text-sm text-muted-foreground tabular-nums w-28 shrink-0">{formatCurrency(sumC)}</span>
+            <span className={`text-right text-sm tabular-nums w-28 shrink-0 ${isIncome ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>{formatCurrency(sumD)}</span>
+            <span className={`text-right text-sm w-32 shrink-0 ${sumDeltaColor}`}>
               {deltaMode === "eur"
                 ? (sumDelta !== 0 ? `${sumDelta > 0 ? "+" : ""}${formatCurrency(sumDelta)}` : "—")
                 : (sumPct !== null ? `${sumPct > 0 ? "+" : ""}${sumPct.toFixed(1)} %` : "—")}
             </span>
-          </TableCell>
-          {!presentationMode && <TableCell />}
-        </TableRow>,
+            {!presentationMode && <span className="w-20 shrink-0" />}
+          </div>
+        </div>,
       );
     }
-    return rows;
+    return blocks;
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -991,11 +1068,11 @@ export default function Kassenbericht() {
           <>
             {/* Section 1: AreaCards */}
             <div className="grid gap-4 md:grid-cols-2">
-              {displayReport?.areas.map((area) => (
+              {displayReportFixed?.areas.map((area) => (
                 <AreaCard
                   key={area.name}
                   area={area}
-                  compareArea={compareReport?.areas.find((a) => a.name === area.name)}
+                  compareArea={compareReportFixed?.areas.find((a) => a.name === area.name)}
                   compareYear={compareYear}
                   displayYear={displayYear}
                 />
@@ -1007,9 +1084,9 @@ export default function Kassenbericht() {
               <CardContent className="pt-6">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   {[
-                    { label: "Gesamteinnahmen", cur: displayReport?.totalIncome ?? 0, prev: compareReport?.totalIncome, tone: "positive" as const },
-                    { label: "Gesamtausgaben", cur: displayReport?.totalExpenses ?? 0, prev: compareReport?.totalExpenses, tone: "negative" as const },
-                    { label: "Jahresergebnis", cur: displayReport?.totalNet ?? 0, prev: compareReport?.totalNet, net: true, tone: "signed" as const },
+                    { label: "Gesamteinnahmen", cur: displayReportFixed?.totalIncome ?? 0, prev: compareReportFixed?.totalIncome, tone: "positive" as const },
+                    { label: "Gesamtausgaben", cur: displayReportFixed?.totalExpenses ?? 0, prev: compareReportFixed?.totalExpenses, tone: "negative" as const },
+                    { label: "Jahresergebnis", cur: displayReportFixed?.totalNet ?? 0, prev: compareReportFixed?.totalNet, net: true, tone: "signed" as const },
                   ].map(({ label, cur, prev, net, tone }) => {
                     const isPositive = tone === "positive" || (tone === "signed" && cur >= 0);
                     const colorClass = isPositive
@@ -1117,28 +1194,27 @@ export default function Kassenbericht() {
                       {filteredItems.length === 0 ? (
                         <div className="py-8 text-center text-sm text-muted-foreground">Keine Positionen.</div>
                       ) : (
-                        <div className="rounded-lg border overflow-hidden">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Bezeichnung</TableHead>
-                                <TableHead className="text-right w-32">{compareYear}</TableHead>
-                                <TableHead className="text-right w-32">{displayYear}</TableHead>
-                                <TableHead className="text-right w-36">
-                                  <button
-                                    onClick={() => setDeltaMode((v) => v === "pct" ? "eur" : "pct")}
-                                    className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                                    title="Zwischen % und € wechseln"
-                                  >
-                                    Veränderung <span className="text-muted-foreground/60 font-normal">({deltaMode === "pct" ? "%" : "€"})</span>
-                                    <ArrowUpDown className="w-3 h-3 opacity-50" />
-                                  </button>
-                                </TableHead>
-                                {!presentationMode && <TableHead className="w-20"></TableHead>}
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>{renderSections()}</TableBody>
-                          </Table>
+                        <div className="space-y-3 overflow-x-auto">
+                          {/* Column header */}
+                          <div className="flex items-center gap-3 px-3 pb-1 text-xs font-medium text-muted-foreground border-b min-w-[640px]">
+                            <span className="w-20 shrink-0">Konto</span>
+                            <span className="flex-1">Bezeichnung</span>
+                            <span className="text-right w-28 shrink-0">{compareYear}</span>
+                            <span className="text-right w-28 shrink-0">{displayYear}</span>
+                            <span className="text-right w-32 shrink-0">
+                              <button
+                                onClick={() => setDeltaMode((v) => v === "pct" ? "eur" : "pct")}
+                                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                                title="Zwischen % und € wechseln"
+                              >
+                                Veränderung <span className="text-muted-foreground/60 font-normal">({deltaMode === "pct" ? "%" : "€"})</span>
+                                <ArrowUpDown className="w-3 h-3 opacity-50" />
+                              </button>
+                            </span>
+                            {!presentationMode && <span className="w-20 shrink-0" />}
+                          </div>
+                          {/* Sections (Einnahmen + Ausgaben) */}
+                          <div className="space-y-4 min-w-[640px]">{renderSections()}</div>
                         </div>
                       )}
                     </TabsContent>

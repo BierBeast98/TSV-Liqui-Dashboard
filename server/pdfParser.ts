@@ -192,15 +192,32 @@ async function parseEuerWithClaude(text: string, year: number): Promise<ParseRes
     return lower as FiscalAreaKey;
   };
 
+  // Konten, die immer als Einnahmen-Storno (negativ auf der Einnahmen-Seite) gelten,
+  // auch wenn der PDF-Layout sie in eine Ausgaben-Sektion schreibt.
+  // Umfasst Rücklastschriften (4002/2125) und zugehörige Gebühren (2130) — Vorzeichen wird zusätzlich auf negativ erzwungen.
+  const INCOME_OVERRIDE_ACCOUNTS = new Set(['4002', '40020', '2125', '21250', '2130', '21300']);
+
+  // Konten, die immer als Ausgaben-Erstattung (negativ auf der Ausgaben-Seite) gelten.
+  // Umfasst Steuererstattungen (Körperschaftsteuer, Solidaritätszuschlag) — type='expense', Betrag negativ.
+  const EXPENSE_OVERRIDE_ACCOUNTS = new Set(['7604', '76040', '7607', '76070']);
+
   const lineItems: ExtractedLineItem[] = (parsed.lineItems ?? [])
     .filter((item: any) => item && item.description && typeof item.amount === 'number')
-    .map((item: any) => ({
-      fiscalArea: normalizeFiscalArea(item.fiscalArea),
-      type: item.type as 'income' | 'expense',
-      accountNumber: item.accountNumber?.toString(),
-      description: item.description,
-      amount: Math.abs(item.amount),
-    }));
+    .map((item: any) => {
+      const accountNumber = item.accountNumber?.toString();
+      const isOverrideIncome = accountNumber && INCOME_OVERRIDE_ACCOUNTS.has(accountNumber);
+      const isOverrideExpense = accountNumber && EXPENSE_OVERRIDE_ACCOUNTS.has(accountNumber);
+      // Override-Konten: type + Vorzeichen werden zwingend gesetzt
+      const overriddenType = isOverrideIncome ? 'income' : isOverrideExpense ? 'expense' : item.type;
+      const amount = (isOverrideIncome || isOverrideExpense) ? -Math.abs(item.amount) : item.amount;
+      return {
+        fiscalArea: normalizeFiscalArea(item.fiscalArea),
+        type: overriddenType as 'income' | 'expense',
+        accountNumber,
+        description: item.description,
+        amount,
+      };
+    });
 
   return {
     success: true,
