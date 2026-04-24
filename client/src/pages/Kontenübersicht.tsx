@@ -1,6 +1,13 @@
 import { Layout } from "@/components/Layout";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
+import {
+  useSummenSalden,
+  useSummenSaldenYears,
+  summenSaldenKey,
+  SUMMEN_SALDEN_YEARS_KEY,
+} from "@/hooks/use-summen-salden";
+import { useFilter } from "@/contexts/FilterContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,19 +18,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-interface SummenSaldenEntry {
-  id: number;
-  year: number;
-  konto: string;
-  sub: string;
-  beschriftung: string;
-  ebWert: number | null;
-  ebSeite: string | null;
-  kumSoll: number | null;
-  kumHaben: number | null;
-  saldo: number | null;
-  saldoSeite: string | null;
-}
+import type { SummenSaldenEntry } from "@/hooks/use-summen-salden";
 
 const KONTO_KLASSEN: Record<string, string> = {
   '0': 'Anlagevermögen',
@@ -48,41 +43,15 @@ function signedValue(val: number | null, seite: string | null): number {
 }
 
 export default function Kontenübersicht() {
+  const { year, setYear, compareYear, setCompareYear } = useFilter();
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear - 1);
-  const [compareYear, setCompareYear] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [filterKlasse, setFilterKlasse] = useState<string>('all');
   const { toast } = useToast();
 
-  const { data: availableYears = [] } = useQuery<number[]>({
-    queryKey: ['/api/summen-salden/years'],
-    queryFn: async () => {
-      const res = await fetch('/api/summen-salden/years');
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
-
-  const { data: entries = [], isLoading } = useQuery<SummenSaldenEntry[]>({
-    queryKey: ['/api/summen-salden', year],
-    queryFn: async () => {
-      const res = await fetch(`/api/summen-salden/${year}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
-
-  const { data: compareEntries = [] } = useQuery<SummenSaldenEntry[]>({
-    queryKey: ['/api/summen-salden', compareYear],
-    queryFn: async () => {
-      if (!compareYear) return [];
-      const res = await fetch(`/api/summen-salden/${compareYear}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!compareYear,
-  });
+  const { data: availableYears = [] } = useSummenSaldenYears();
+  const { data: entries = [], isLoading } = useSummenSalden(year);
+  const { data: compareEntries = [] } = useSummenSalden(compareYear);
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -93,8 +62,8 @@ export default function Kontenübersicht() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/summen-salden', year] });
-      queryClient.invalidateQueries({ queryKey: ['/api/summen-salden/years'] });
+      queryClient.invalidateQueries({ queryKey: summenSaldenKey(year) });
+      queryClient.invalidateQueries({ queryKey: SUMMEN_SALDEN_YEARS_KEY });
       toast({ title: 'Importiert', description: data.message });
     },
     onError: (e: Error) => toast({ title: 'Fehler', description: e.message, variant: 'destructive' }),
@@ -107,8 +76,8 @@ export default function Kontenübersicht() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/summen-salden', year] });
-      queryClient.invalidateQueries({ queryKey: ['/api/summen-salden/years'] });
+      queryClient.invalidateQueries({ queryKey: summenSaldenKey(year) });
+      queryClient.invalidateQueries({ queryKey: SUMMEN_SALDEN_YEARS_KEY });
       toast({ title: 'Gelöscht', description: `Daten für ${year} wurden gelöscht.` });
     },
   });

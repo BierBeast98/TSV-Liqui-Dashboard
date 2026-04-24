@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { TransactionResponse, InsertContractSuggestion } from "@shared/schema";
+import { inferFrequencyFromDates } from "./utils/frequencyDetection";
 
 interface TransactionCluster {
   name: string;
@@ -44,29 +45,6 @@ function calculateSimilarity(desc1: string, desc2: string): number {
   return intersection.size / union.size;
 }
 
-function inferFrequency(dates: Date[]): { frequency: "monthly" | "quarterly" | "yearly" | null; confidence: number } {
-  if (dates.length < 2) return { frequency: null, confidence: 0 };
-  
-  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
-  const deltas: number[] = [];
-  
-  for (let i = 1; i < sorted.length; i++) {
-    const daysDiff = Math.round((sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24));
-    deltas.push(daysDiff);
-  }
-  
-  const medianDelta = deltas.sort((a, b) => a - b)[Math.floor(deltas.length / 2)];
-  
-  if (medianDelta >= 26 && medianDelta <= 35 && dates.length >= 4) {
-    return { frequency: "monthly", confidence: Math.min(0.9, 0.5 + dates.length * 0.05) };
-  } else if (medianDelta >= 80 && medianDelta <= 110 && dates.length >= 3) {
-    return { frequency: "quarterly", confidence: Math.min(0.85, 0.4 + dates.length * 0.1) };
-  } else if (medianDelta >= 330 && medianDelta <= 400 && dates.length >= 2) {
-    return { frequency: "yearly", confidence: Math.min(0.8, 0.3 + dates.length * 0.15) };
-  }
-  
-  return { frequency: null, confidence: 0 };
-}
 
 function extractContractName(transactions: TransactionResponse[]): string {
   const descriptions = transactions.map(t => t.description);
@@ -205,7 +183,7 @@ export async function analyzeRecurringTransactions(): Promise<void> {
     if (transactions.length < 2) continue;
     
     const dates = transactions.map((t: TransactionResponse) => new Date(t.date));
-    const { frequency, confidence } = inferFrequency(dates);
+    const { frequency, confidence } = inferFrequencyFromDates(dates);
     
     if (!frequency || confidence < 0.3) continue;
     

@@ -31,7 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
-import type { Account } from "@shared/schema";
+import { useAccounts } from "@/hooks/use-accounts";
 
 interface TransactionWithDetails {
   id: number;
@@ -64,9 +64,7 @@ export default function Home() {
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null);
   
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: ["/api/accounts"],
-  });
+  const { data: accounts } = useAccounts();
   
   const { data: stats, isLoading: statsLoading } = useDashboardStats({ 
     year, 

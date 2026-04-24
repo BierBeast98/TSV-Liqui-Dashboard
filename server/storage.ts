@@ -42,20 +42,38 @@ export interface IStorage extends IAuthStorage {
   upsertAccountBalance(balance: InsertAccountBalance): Promise<AccountBalance>;
 
   // Transactions
-  getTransactions(params?: { 
+  getTransactions(params?: {
     year?: number;
     years?: number[];  // Multiple years support
-    categoryId?: number; 
+    categoryId?: number;
     categoryIds?: number[];  // Multiple categories support
     accountId?: number;
     accountIds?: number[];  // Multiple accounts support
-    account?: string; 
+    account?: string;
     search?: string;
     startDate?: string;
     endDate?: string;
     minAmount?: number;
     maxAmount?: number;
+    hasContract?: boolean;
+    limit?: number;
+    offset?: number;
   }): Promise<TransactionResponse[]>;
+  countTransactions(params?: {
+    year?: number;
+    years?: number[];
+    categoryId?: number;
+    categoryIds?: number[];
+    accountId?: number;
+    accountIds?: number[];
+    account?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+    hasContract?: boolean;
+  }): Promise<number>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransaction(id: number, updates: UpdateTransactionRequest): Promise<Transaction>;
@@ -442,13 +460,15 @@ export class DatabaseStorage implements IStorage {
     categoryIds?: number[];  // Multiple categories support
     accountId?: number;
     accountIds?: number[];  // Multiple accounts support
-    account?: string; 
+    account?: string;
     search?: string;
     startDate?: string;
     endDate?: string;
     minAmount?: number;
     maxAmount?: number;
     hasContract?: boolean;
+    limit?: number;
+    offset?: number;
   }): Promise<TransactionResponse[]> {
     let query = db.select({
       id: transactions.id,
@@ -529,8 +549,68 @@ export class DatabaseStorage implements IStorage {
     if (filters.length > 0) {
       query.where(and(...filters));
     }
-    
-    return await query.orderBy(desc(transactions.date)) as TransactionResponse[];
+
+    let ordered = query.orderBy(desc(transactions.date)) as any;
+    if (params?.limit !== undefined && params.limit > 0) {
+      ordered = ordered.limit(params.limit);
+    }
+    if (params?.offset !== undefined && params.offset > 0) {
+      ordered = ordered.offset(params.offset);
+    }
+    return await ordered as TransactionResponse[];
+  }
+
+  async countTransactions(params?: {
+    year?: number;
+    years?: number[];
+    categoryId?: number;
+    categoryIds?: number[];
+    accountId?: number;
+    accountIds?: number[];
+    account?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+    hasContract?: boolean;
+  }): Promise<number> {
+    const filters: any[] = [];
+
+    if (params?.years && params.years.length > 0) {
+      const yearConditions = params.years.map(y => sql`EXTRACT(YEAR FROM ${transactions.date}) = ${y}`);
+      if (yearConditions.length === 1) filters.push(yearConditions[0]);
+      else filters.push(sql`(${sql.join(yearConditions, sql` OR `)})`);
+    } else if (params?.year) {
+      filters.push(sql`EXTRACT(YEAR FROM ${transactions.date}) = ${params.year}`);
+    }
+    if (params?.categoryIds && params.categoryIds.length > 0) {
+      filters.push(inArray(transactions.categoryId, params.categoryIds));
+    } else if (params?.categoryId) {
+      filters.push(eq(transactions.categoryId, params.categoryId));
+    }
+    if (params?.accountIds && params.accountIds.length > 0) {
+      filters.push(inArray(transactions.accountId, params.accountIds));
+    } else if (params?.accountId) {
+      filters.push(eq(transactions.accountId, params.accountId));
+    }
+    if (params?.account && params.account !== "all") {
+      filters.push(eq(transactions.account, params.account));
+    }
+    if (params?.search) {
+      filters.push(sql`(${transactions.description} ILIKE ${`%${params.search}%`} OR ${transactions.counterparty} ILIKE ${`%${params.search}%`})`);
+    }
+    if (params?.startDate) filters.push(sql`${transactions.date} >= ${new Date(params.startDate)}`);
+    if (params?.endDate) filters.push(sql`${transactions.date} <= ${new Date(params.endDate)}`);
+    if (params?.minAmount !== undefined) filters.push(sql`ABS(${transactions.amount}) >= ${params.minAmount}`);
+    if (params?.maxAmount !== undefined) filters.push(sql`ABS(${transactions.amount}) <= ${params.maxAmount}`);
+    if (params?.hasContract === true) filters.push(sql`${transactions.contractId} IS NOT NULL`);
+    else if (params?.hasContract === false) filters.push(sql`${transactions.contractId} IS NULL`);
+
+    let q = db.select({ value: sql<number>`count(*)::int` }).from(transactions) as any;
+    if (filters.length > 0) q = q.where(and(...filters));
+    const [row] = await q;
+    return row?.value ?? 0;
   }
 
   async linkTransactionToContract(transactionId: number, contractId: number): Promise<Transaction> {

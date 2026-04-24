@@ -1,6 +1,10 @@
 import { Layout } from "@/components/Layout";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEuerReport, useEuerItems, euerItemsKey } from "@/hooks/use-euer";
+import { useLiquideMittel } from "@/hooks/use-summen-salden";
+import { useFilter } from "@/contexts/FilterContext";
+import { ReconciliationCard } from "@/components/ReconciliationCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -23,25 +27,7 @@ import {
   ResponsiveContainer 
 } from "recharts";
 
-interface FiscalAreaSummary {
-  name: string;
-  label: string;
-  income: number;
-  expenses: number;
-  net: number;
-  categories?: { name: string; amount: number; type: string }[];
-}
-
-interface FiscalAreaReport {
-  year: number;
-  source: 'pdf' | 'transactions' | 'none';
-  sourceFileName?: string;
-  uploadedAt?: string;
-  areas: FiscalAreaSummary[];
-  totalIncome: number;
-  totalExpenses: number;
-  totalNet: number;
-}
+import type { FiscalAreaSummary, FiscalAreaReport, EuerLineItem } from "@/hooks/use-euer";
 
 interface EuerFormData {
   sourceFileName: string;
@@ -55,14 +41,6 @@ interface EuerFormData {
   wirtschaftlichExpenses: number;
 }
 
-interface EuerLineItem {
-  id: number;
-  fiscalArea: string;
-  type: string;
-  accountNumber: string;
-  description: string;
-  amount: number;
-}
 
 interface ExtractedLineItem {
   fiscalArea: string;
@@ -84,8 +62,8 @@ interface ExtractionResult {
 }
 
 export default function EuerReport() {
+  const { year, setYear } = useFilter();
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState<number>(currentYear - 1); // Default to previous year for EÜR
   const [isEditing, setIsEditing] = useState(false);
   const [selectedArea, setSelectedArea] = useState<FiscalAreaSummary | null>(null);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
@@ -93,36 +71,13 @@ export default function EuerReport() {
   const [showLiquidDetails, setShowLiquidDetails] = useState(false);
   const { toast } = useToast();
 
-  const { data: report, isLoading } = useQuery<FiscalAreaReport>({
-    queryKey: ['/api/report/euer', year],
-    queryFn: async () => {
-      const res = await fetch(`/api/report/euer?year=${year}`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch report');
-      return res.json();
-    }
-  });
-
-  const { data: lineItems, isLoading: isLoadingItems } = useQuery<EuerLineItem[]>({
-    queryKey: ['/api/euer-reports', year, 'items', selectedArea?.name],
-    queryFn: async () => {
-      const res = await fetch(`/api/euer-reports/${year}/items?fiscalArea=${selectedArea?.name}`, { credentials: 'include' });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!selectedArea
-  });
-
-  const { data: liquideMittel, refetch: refetchLiquid } = useQuery<{
-    year: number; anfangsbestand: number; endbestand: number; veraenderung: number;
-    details: { konto: string; sub: string; beschriftung: string; ebWert: number; ebSeite: string | null; saldo: number; saldoSeite: string | null }[];
-  }>({
-    queryKey: ['/api/summen-salden', year, 'liquide-mittel'],
-    queryFn: async () => {
-      const res = await fetch(`/api/summen-salden/${year}/liquide-mittel`);
-      if (!res.ok) return null;
-      return res.json();
-    },
-  });
+  const { data: report, isLoading } = useEuerReport(year);
+  const { data: lineItems, isLoading: isLoadingItems } = useEuerItems(
+    year,
+    selectedArea?.name,
+    { enabled: !!selectedArea },
+  );
+  const { data: liquideMittel, refetch: refetchLiquid } = useLiquideMittel(year);
 
   const sumSaldenUploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -234,7 +189,7 @@ export default function EuerReport() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items: result.lineItems }),
         });
-        queryClient.invalidateQueries({ queryKey: ['/api/euer-reports', year, 'items'], exact: false });
+        queryClient.invalidateQueries({ queryKey: euerItemsKey(year), exact: false });
       } catch (e) {
         console.error('Fehler beim Speichern der Einzelpositionen:', e);
       }
@@ -621,6 +576,8 @@ export default function EuerReport() {
                 <span>Hinweis: Diese Daten basieren auf den Banktransaktionen. Klicke auf "Bearbeiten" um die offiziellen PDF-Werte einzutragen.</span>
               </div>
             )}
+
+            <ReconciliationCard year={year} />
 
             <Card>
               <CardHeader>

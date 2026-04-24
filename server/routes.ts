@@ -14,6 +14,7 @@ import { parsePdf, parseSummenSaldenPdf, parseKontoauszugPdf } from "./pdfParser
 import { parseDtvfCsv } from "./datevParser";
 import { SKR49_DEFAULT_MAPPING, classifyBooking, type MappingValue } from "./datevSkr49Mapping";
 import { EAS_CATEGORIES, type EasCategory } from "@shared/schema";
+import { inferFrequencyFromIntervals } from "./utils/frequencyDetection";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -238,7 +239,12 @@ export async function registerRoutes(
       return ids.length > 0 ? ids : undefined;
     };
     
-    const params = {
+    const hasLimit = query.limit !== undefined;
+    const hasOffset = query.offset !== undefined;
+    const parsedLimit = hasLimit ? Math.max(0, Number(query.limit) || 0) : undefined;
+    const parsedOffset = hasOffset ? Math.max(0, Number(query.offset) || 0) : undefined;
+
+    const filterParams = {
       year: query.year ? Number(query.year) : undefined,
       years: parseIds(query.years),  // Multiple years: "2024,2025"
       categoryId: query.categoryId ? Number(query.categoryId) : undefined,
@@ -252,8 +258,19 @@ export async function registerRoutes(
       minAmount: query.minAmount ? Number(query.minAmount) : undefined,
       maxAmount: query.maxAmount ? Number(query.maxAmount) : undefined,
     };
-    const txs = await storage.getTransactions(params);
-    res.json(txs);
+
+    if (hasLimit || hasOffset) {
+      const [txs, total] = await Promise.all([
+        storage.getTransactions({ ...filterParams, limit: parsedLimit, offset: parsedOffset }),
+        storage.countTransactions(filterParams),
+      ]);
+      res.setHeader("X-Total-Count", String(total));
+      res.setHeader("Access-Control-Expose-Headers", "X-Total-Count");
+      res.json(txs);
+    } else {
+      const txs = await storage.getTransactions(filterParams);
+      res.json(txs);
+    }
   });
 
   app.get("/api/transactions/by-ids", async (req, res) => {
@@ -430,21 +447,7 @@ export async function registerRoutes(
         });
       }
 
-      // Detect frequency based on intervals
-      let detectedFrequency: "monthly" | "quarterly" | "yearly" | null = null;
-      if (intervals.length > 0) {
-        const medianDays = intervals
-          .map(i => i.days)
-          .sort((a, b) => a - b)[Math.floor(intervals.length / 2)];
-        
-        if (medianDays >= 26 && medianDays <= 35 && intervals.length >= 3) {
-          detectedFrequency = "monthly";
-        } else if (medianDays >= 80 && medianDays <= 110 && intervals.length >= 2) {
-          detectedFrequency = "quarterly";
-        } else if (medianDays >= 330 && medianDays <= 400 && intervals.length >= 1) {
-          detectedFrequency = "yearly";
-        }
-      }
+      const { frequency: detectedFrequency } = inferFrequencyFromIntervals(intervals.map(i => i.days));
 
       // Return sorted list so intervals align with displayed transactions
       res.json({
@@ -960,6 +963,66 @@ export async function registerRoutes(
     const year = Number(req.params.year);
     await storage.deleteSummenSalden(year);
     res.json({ message: "Gelöscht" });
+  });
+
+  // Reconciliation: EÜR (authoritative, from PDF) vs. Transaction-summed totals.
+  // Returns both sides + delta per fiscal area so the UI can show abweichungen.
+  // EÜR is the "truth"; transactions are operational and may diverge.
+  app.get("/api/report/euer/reconcile", async (req, res) => {
+    const year = Number(req.query.year);
+    if (!year || isNaN(year)) {
+      return res.status(400).json({ message: "year required" });
+    }
+
+    const [pdfReport, txStats] = await Promise.all([
+      storage.getEuerReport(year),
+      storage.getFiscalAreaStats(year),
+    ]);
+
+    const areaDefs = [
+      { name: "ideell", label: "A. Ideeller Tätigkeitsbereich" },
+      { name: "vermoegensverwaltung", label: "B. Vermögensverwaltung" },
+      { name: "zweckbetrieb", label: "C. Zweckbetriebe" },
+      { name: "wirtschaftlich", label: "D. Wirtschaftlicher Geschäftsbetrieb" },
+    ];
+
+    const pdfAreaMap = new Map<string, { income: number; expenses: number }>();
+    if (pdfReport) {
+      pdfAreaMap.set("ideell", { income: pdfReport.ideellIncome || 0, expenses: pdfReport.ideellExpenses || 0 });
+      pdfAreaMap.set("vermoegensverwaltung", { income: pdfReport.vermoegenIncome || 0, expenses: pdfReport.vermoegenExpenses || 0 });
+      pdfAreaMap.set("zweckbetrieb", { income: pdfReport.zweckbetriebIncome || 0, expenses: pdfReport.zweckbetriebExpenses || 0 });
+      pdfAreaMap.set("wirtschaftlich", { income: pdfReport.wirtschaftlichIncome || 0, expenses: pdfReport.wirtschaftlichExpenses || 0 });
+    }
+
+    const txAreaMap = new Map(txStats.areas.map(a => [a.name, { income: a.income, expenses: a.expenses }]));
+
+    const areas = areaDefs.map(def => {
+      const euer = pdfAreaMap.get(def.name) ?? null;
+      const tx = txAreaMap.get(def.name) ?? { income: 0, expenses: 0 };
+      const euerNet = euer ? euer.income - euer.expenses : null;
+      const txNet = tx.income - tx.expenses;
+      return {
+        name: def.name,
+        label: def.label,
+        euer, // null if no PDF
+        tx,
+        delta: euer
+          ? {
+              income: tx.income - euer.income,
+              expenses: tx.expenses - euer.expenses,
+              net: txNet - (euerNet as number),
+            }
+          : null,
+      };
+    });
+
+    res.json({
+      year,
+      hasEuer: !!pdfReport,
+      sourceFileName: pdfReport?.sourceFileName,
+      uploadedAt: pdfReport?.uploadedAt,
+      areas,
+    });
   });
 
   // EÜR endpoint - PDF-based with transaction fallback

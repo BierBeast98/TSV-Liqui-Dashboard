@@ -15,6 +15,8 @@ import { Loader2, Save, Wallet, RefreshCw, CheckCircle2, AlertTriangle, Pencil, 
 import { useState, useEffect } from "react";
 import { formatCurrency } from "@/lib/utils";
 import type { AccountWithTxCount } from "@shared/schema";
+import { useAccounts } from "@/hooks/use-accounts";
+import { useSummenSaldenYears, SUMMEN_SALDEN_YEARS_KEY } from "@/hooks/use-summen-salden";
 
 interface AccountBalance {
   id: number;
@@ -47,9 +49,7 @@ export default function Settings() {
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
   const [deleteConfirm, setDeleteConfirm] = useState<AccountWithTxCount | null>(null);
 
-  const { data: accounts, isLoading: accountsLoading } = useQuery<AccountWithTxCount[]>({
-    queryKey: ["/api/accounts"],
-  });
+  const { data: accounts, isLoading: accountsLoading } = useAccounts();
 
   const { data: balances, isLoading: balancesLoading } = useQuery<AccountBalance[]>({
     queryKey: ["/api/account-balances", year],
@@ -60,14 +60,7 @@ export default function Settings() {
     },
   });
 
-  const { data: summenSaldenYears } = useQuery<number[]>({
-    queryKey: ["/api/summen-salden/years"],
-    queryFn: async () => {
-      const res = await fetch("/api/summen-salden/years", { credentials: "include" });
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
+  const { data: summenSaldenYears } = useSummenSaldenYears();
 
   useEffect(() => {
     if (balances && accounts) {

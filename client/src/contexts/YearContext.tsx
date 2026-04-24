@@ -1,35 +1,17 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { FilterProvider, useFilter } from "./FilterContext";
 
-interface YearContextType {
-  selectedYear: number;
-  setSelectedYear: (year: number) => void;
-}
-
-const YearContext = createContext<YearContextType | null>(null);
-
-const STORAGE_KEY = 'app_selectedYear';
+/**
+ * Compatibility shim over FilterContext. YearProvider is kept so existing
+ * imports (App.tsx, useYear() callers) keep working; new code should use
+ * FilterProvider + useFilter() directly.
+ */
 
 export function YearProvider({ children }: { children: ReactNode }) {
-  const [selectedYear, setSelectedYear] = useState<number>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? Number(saved) : new Date().getFullYear();
-  });
-  
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, String(selectedYear));
-  }, [selectedYear]);
-  
-  return (
-    <YearContext.Provider value={{ selectedYear, setSelectedYear }}>
-      {children}
-    </YearContext.Provider>
-  );
+  return <FilterProvider>{children}</FilterProvider>;
 }
 
 export function useYear() {
-  const context = useContext(YearContext);
-  if (!context) {
-    throw new Error("useYear must be used within a YearProvider");
-  }
-  return context;
+  const { year, setYear } = useFilter();
+  return { selectedYear: year, setSelectedYear: setYear };
 }

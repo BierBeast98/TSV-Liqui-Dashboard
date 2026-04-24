@@ -1,6 +1,8 @@
 import { useState, useMemo, ReactNode, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useEuerReport, useEuerItems } from "@/hooks/use-euer";
+import { useFilter } from "@/contexts/FilterContext";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -564,8 +566,9 @@ const AREA_LETTERS = ["A", "B", "C", "D"];
 
 export default function Kassenbericht() {
   const currentYear = new Date().getFullYear();
-  const [displayYear, setDisplayYear] = useState(currentYear - 1);
-  const [compareYear, setCompareYear] = useState(currentYear - 2);
+  const { year: displayYear, setYear: setDisplayYear, compareYear: ctxCompareYear, setCompareYear: setCtxCompareYear } = useFilter();
+  const compareYear = ctxCompareYear ?? currentYear - 2;
+  const setCompareYear = (y: number) => setCtxCompareYear(y);
   const [activeTab, setActiveTab] = useState("ideell");
   const [pageTab, setPageTab] = useState<"jahresvergleich" | "datev">("jahresvergleich");
   const [deltaMode, setDeltaMode] = useState<"pct" | "eur">("pct");
@@ -660,41 +663,20 @@ export default function Kassenbericht() {
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
-  const { data: displayReport, isLoading: l1 } = useQuery<FiscalAreaReport>({
-    queryKey: ["/api/report/euer", displayYear],
-    queryFn: async () => {
-      const res = await fetch(`/api/report/euer?year=${displayYear}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-  });
-
-  const { data: compareReport, isLoading: l2 } = useQuery<FiscalAreaReport>({
-    queryKey: ["/api/report/euer", compareYear],
-    queryFn: async () => {
-      const res = await fetch(`/api/report/euer?year=${compareYear}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-  });
-
-  const { data: displayItems } = useQuery<EuerLineItem[]>({
-    queryKey: ["/api/euer-reports", displayYear, "items"],
-    queryFn: async () => {
-      const res = await fetch(`/api/euer-reports/${displayYear}/items`, { credentials: "include" });
-      return res.ok ? res.json() : [];
-    },
+  const { data: displayReport, isLoading: l1 } = useEuerReport(displayYear) as {
+    data: FiscalAreaReport | undefined;
+    isLoading: boolean;
+  };
+  const { data: compareReport, isLoading: l2 } = useEuerReport(compareYear) as {
+    data: FiscalAreaReport | undefined;
+    isLoading: boolean;
+  };
+  const { data: displayItems } = useEuerItems(displayYear, null, {
     enabled: !!displayReport,
-  });
-
-  const { data: compareItems } = useQuery<EuerLineItem[]>({
-    queryKey: ["/api/euer-reports", compareYear, "items"],
-    queryFn: async () => {
-      const res = await fetch(`/api/euer-reports/${compareYear}/items`, { credentials: "include" });
-      return res.ok ? res.json() : [];
-    },
+  }) as { data: EuerLineItem[] | undefined };
+  const { data: compareItems } = useEuerItems(compareYear, null, {
     enabled: !!compareReport,
-  });
+  }) as { data: EuerLineItem[] | undefined };
 
   // ── Derived Data ───────────────────────────────────────────────────────────
 

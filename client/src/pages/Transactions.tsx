@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useTransactions, useCreateTransaction, useDeleteTransaction, useUpdateTransaction, useUploadTransactions, useAutoCategorize } from "@/hooks/use-transactions";
 import { useCategories } from "@/hooks/use-categories";
+import { useAccounts } from "@/hooks/use-accounts";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   Table, 
@@ -114,7 +115,7 @@ export default function Transactions() {
   // Sort State
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
-  const { data: accounts } = useQuery<any[]>({ queryKey: ["/api/accounts"] });
+  const { data: accounts } = useAccounts();
 
   // Convert selected string arrays to number arrays for API
   const yearsAsNumbers = selectedYears.length > 0 ? selectedYears.map(Number) : undefined;
@@ -147,6 +148,15 @@ export default function Transactions() {
     localStorage.setItem('txFilter_categories', '[]');
     localStorage.setItem('txFilter_accounts', '[]');
   };
+
+  // Client-side render cap. Server can deliver everything, but rendering
+  // 2000+ rich table rows gets sluggish. Start with first 200; user can
+  // extend in 200-row chunks. Filters/sort reset the cap.
+  const RENDER_CHUNK = 200;
+  const [renderLimit, setRenderLimit] = useState(RENDER_CHUNK);
+  useEffect(() => {
+    setRenderLimit(RENDER_CHUNK);
+  }, [selectedYears, selectedCategories, selectedAccounts, search, minAmount, maxAmount, startDate, endDate, sortConfig]);
 
   // Sorting Logic
   const sortedTransactions = [...(transactions || [])].sort((a, b) => {
@@ -828,9 +838,9 @@ export default function Transactions() {
                 </TableCell>
               </TableRow>
             ) : (
-              sortedTransactions?.map((tx) => (
-                <TableRow 
-                  key={tx.id} 
+              sortedTransactions?.slice(0, renderLimit).map((tx) => (
+                <TableRow
+                  key={tx.id}
                   className={`group transition-colors cursor-pointer ${selectedIds.has(tx.id) ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-muted/30'}`}
                   data-testid={`transaction-row-${tx.id}`}
                   onClick={() => { setDetailTx(tx); setIsDetailOpen(true); }}
@@ -914,6 +924,22 @@ export default function Transactions() {
           </TableBody>
         </Table>
       </div>
+
+      {sortedTransactions && sortedTransactions.length > renderLimit && (
+        <div className="flex items-center justify-between gap-4 px-2 py-3 text-sm text-muted-foreground border-t">
+          <span>
+            {renderLimit.toLocaleString("de-DE")} von {sortedTransactions.length.toLocaleString("de-DE")} Buchungen angezeigt
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRenderLimit(l => Math.min(l + RENDER_CHUNK, sortedTransactions.length))}
+            data-testid="button-load-more-tx"
+          >
+            Weitere {Math.min(RENDER_CHUNK, sortedTransactions.length - renderLimit).toLocaleString("de-DE")} laden
+          </Button>
+        </div>
+      )}
 
       {/* Edit Dialog - Rendered conditionally to reset form state */}
       <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if(!open) setSelectedTx(null); }}>

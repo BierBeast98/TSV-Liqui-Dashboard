@@ -16,11 +16,11 @@ import EventDetail from "@/pages/EventDetail";
 import Contracts from "@/pages/Contracts";
 import Kassenbericht from "@/pages/Kassenbericht";
 import { ChatWidget } from "@/components/ChatWidget";
-import { YearProvider, useYear } from "@/contexts/YearContext";
+import { FilterProvider, useFilter } from "@/contexts/FilterContext";
 
 function ChatWidgetWithYear() {
-  const { selectedYear } = useYear();
-  return <ChatWidget year={selectedYear} />;
+  const { year } = useFilter();
+  return <ChatWidget year={year} />;
 }
 
 function PageWithChat({ component: Component }: { component: React.ComponentType }) {
@@ -55,10 +55,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <YearProvider>
+        <FilterProvider>
           <Toaster />
           <Router />
-        </YearProvider>
+        </FilterProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
