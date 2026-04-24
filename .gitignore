@@ -14,3 +14,4 @@ attached_assets/
 # Claude session checkpoints
 .claude-checkpoint.md
 .claude-checkpoints/
+.claude-fibu-roadmap.md
