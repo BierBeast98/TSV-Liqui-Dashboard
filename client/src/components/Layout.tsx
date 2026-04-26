@@ -12,6 +12,8 @@ import {
   Presentation,
   PanelLeftClose,
   PanelLeftOpen,
+  Library,
+  BookCheck,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -47,6 +49,13 @@ const NAV_GROUPS = [
       { href: "/kassenbericht", icon: Presentation, label: "Kassenbericht" },
       { href: "/konten", icon: BookOpen, label: "Kontenübersicht" },
       { href: "/forecast", icon: TrendingUp, label: "Prognose" },
+    ],
+  },
+  {
+    label: "Finanzbuchhaltung",
+    items: [
+      { href: "/fibu/journal", icon: BookCheck, label: "Journal" },
+      { href: "/fibu/kontenrahmen", icon: Library, label: "Kontenrahmen" },
     ],
   },
   {

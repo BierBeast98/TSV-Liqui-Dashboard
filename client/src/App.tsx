@@ -15,6 +15,8 @@ import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Contracts from "@/pages/Contracts";
 import Kassenbericht from "@/pages/Kassenbericht";
+import FibuKontenrahmen from "@/pages/fibu/Kontenrahmen";
+import FibuJournal from "@/pages/fibu/Journal";
 import { ChatWidget } from "@/components/ChatWidget";
 import { FilterProvider, useFilter } from "@/contexts/FilterContext";
 
@@ -45,6 +47,8 @@ function Router() {
       <Route path="/euer" component={() => <PageWithChat component={EuerReport} />} />
       <Route path="/kassenbericht" component={() => <PageWithChat component={Kassenbericht} />} />
       <Route path="/konten" component={() => <PageWithChat component={Kontenübersicht} />} />
+      <Route path="/fibu/kontenrahmen" component={() => <PageWithChat component={FibuKontenrahmen} />} />
+      <Route path="/fibu/journal" component={() => <PageWithChat component={FibuJournal} />} />
       <Route path="/settings" component={() => <PageWithChat component={Settings} />} />
       <Route component={NotFound} />
     </Switch>

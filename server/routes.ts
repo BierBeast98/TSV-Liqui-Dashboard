@@ -15,6 +15,7 @@ import { parseDtvfCsv } from "./datevParser";
 import { SKR49_DEFAULT_MAPPING, classifyBooking, type MappingValue } from "./datevSkr49Mapping";
 import { EAS_CATEGORIES, type EasCategory } from "@shared/schema";
 import { inferFrequencyFromIntervals } from "./utils/frequencyDetection";
+import { registerFibuRoutes } from "./fibu/routes";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1573,6 +1574,9 @@ export async function registerRoutes(
     await storage.deleteLiquiditySnapshot(year);
     res.json({ success: true });
   });
+
+  // === FiBu-Subsystem (isoliertes Schatten-Buchführungs-Modul nach SKR49) ===
+  await registerFibuRoutes(app);
 
   return httpServer;
 }

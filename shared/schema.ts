@@ -5,6 +5,8 @@ import { z } from "zod";
 export * from "./models/auth";
 // Import chat tables for AI assistant
 export * from "./models/chat";
+// FiBu-Subsystem (isolierte Schatten-Buchhaltung nach SKR49, `fibu_` Prefix)
+export * from "./fibu-schema";
 
 // === TABLE DEFINITIONS ===
 
